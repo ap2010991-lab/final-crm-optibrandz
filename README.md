@@ -27,11 +27,11 @@ The server includes a seeded in-memory data layer for immediate local testing. T
 
 ## Editing Demo Data
 
-The app clearly marks the seeded records as demo data. Log in as the owner and open:
+The app clearly marks the seeded records as demo data. Replace them from the normal CRM pages using the Add and Edit buttons on Clients, Leads, Services, Content, Invoices, and Campaigns. Dashboard numbers update from those same records.
 
-`/admin/data`
+## Daily Notifications
 
-From there you can edit Clients, Leads, Service Orders, Tasks, Invoices, Campaigns, Calendar Items, Activities, and Notifications. Save a collection and the running CRM updates immediately.
+The bell icon opens Today’s Action Center. It automatically lists overdue and due-today work from the CRM: invoices, tasks, lead follow-ups, client renewals, and scheduled content. Each notification links back to the page where you can handle it.
 
 ## Vercel Deploy
 
