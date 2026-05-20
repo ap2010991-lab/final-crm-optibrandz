@@ -1,0 +1,245 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(TEAM)
+  avatar    String?
+  phone     String?
+  clientId  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tasks     Task[]
+  activities Activity[]
+  leads     Lead[]   @relation("AssignedLeads")
+  notifications Notification[]
+}
+
+enum Role {
+  OWNER
+  ACCOUNT_MANAGER
+  DESIGNER
+  SEO_EXEC
+  CLIENT
+  TEAM
+}
+
+model Lead {
+  id              String      @id @default(uuid())
+  name            String
+  phone           String
+  email           String?
+  businessName    String?
+  city            String?
+  source          LeadSource  @default(WEBSITE)
+  status          LeadStatus  @default(NEW)
+  serviceInterest String[]
+  budget          String?
+  notes           String?
+  score           Int         @default(0)
+  assignedTo      User?       @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedToId    String?
+  followUpDate    DateTime?
+  convertedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  activities      Activity[]
+  client          Client?
+}
+
+enum LeadSource { WEBSITE WHATSAPP GOOGLE_ADS META_ADS REFERRAL WALK_IN INSTAGRAM COLD_CALL }
+enum LeadStatus { NEW CONTACTED DEMO_SCHEDULED PROPOSAL_SENT NEGOTIATION CONVERTED LOST }
+
+model Client {
+  id            String       @id @default(uuid())
+  businessName  String
+  contactPerson String
+  phone         String
+  email         String?
+  city          String?
+  industry      String?
+  logoUrl       String?
+  websiteUrl    String?
+  gstNumber     String?
+  address       String?
+  healthScore   Int          @default(100)
+  status        ClientStatus @default(ACTIVE)
+  onboardedAt   DateTime     @default(now())
+  renewalDate   DateTime?
+  totalValue    Float        @default(0)
+  leadId        String?      @unique
+  lead          Lead?        @relation(fields: [leadId], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  services      ServiceOrder[]
+  invoices      Invoice[]
+  campaigns     CampaignLog[]
+  activities    Activity[]
+  calendarItems ContentCalendar[]
+  reports       Report[]
+}
+
+enum ClientStatus { ACTIVE PAUSED CHURNED ONBOARDING }
+
+model ServiceOrder {
+  id           String        @id @default(uuid())
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id])
+  serviceType  ServiceType
+  packageName  String?
+  monthlyValue Float
+  startDate    DateTime
+  endDate      DateTime?
+  status       ServiceStatus @default(ACTIVE)
+  deliverables Json
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  tasks        Task[]
+}
+
+enum ServiceType { SEO SMO SMM GOOGLE_ADS META_ADS YOUTUBE GMB WEBSITE GRAPHIC_DESIGN INFLUENCER CONTENT }
+enum ServiceStatus { ACTIVE PAUSED COMPLETED CANCELLED }
+
+model Task {
+  id             String       @id @default(uuid())
+  title          String
+  description    String?
+  serviceOrderId String?
+  serviceOrder   ServiceOrder? @relation(fields: [serviceOrderId], references: [id])
+  assignedToId   String
+  assignedTo     User         @relation(fields: [assignedToId], references: [id])
+  status         TaskStatus   @default(PENDING)
+  priority       Priority     @default(MEDIUM)
+  dueDate        DateTime
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+enum TaskStatus { PENDING IN_PROGRESS REVIEW DONE OVERDUE }
+enum Priority { LOW MEDIUM HIGH URGENT }
+
+model ContentCalendar {
+  id            String        @id @default(uuid())
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id])
+  month         Int
+  year          Int
+  platform      Platform
+  postType      PostType
+  caption       String?
+  designBrief   String?
+  scheduledDate DateTime?
+  status        ContentStatus @default(DRAFT)
+  mediaUrl      String?
+  approvedAt    DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum Platform { INSTAGRAM FACEBOOK LINKEDIN TWITTER YOUTUBE GOOGLE_ADS }
+enum PostType { REEL CAROUSEL STATIC STORY BLOG ARTICLE }
+enum ContentStatus { DRAFT IN_DESIGN REVIEW APPROVED REJECTED PUBLISHED }
+
+model Invoice {
+  id            String        @id @default(uuid())
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id])
+  invoiceNumber String        @unique
+  amount        Float
+  gstAmount     Float         @default(0)
+  totalAmount   Float
+  status        InvoiceStatus @default(PENDING)
+  dueDate       DateTime
+  paidAt        DateTime?
+  paidAmount    Float?
+  notes         String?
+  pdfUrl        String?
+  lineItems     Json
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum InvoiceStatus { PENDING PARTIAL PAID OVERDUE CANCELLED }
+
+model CampaignLog {
+  id             String   @id @default(uuid())
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id])
+  month          Int
+  year           Int
+  platform       Platform
+  adSpend        Float?
+  leadsGenerated Int?
+  impressions    Int?
+  clicks         Int?
+  ctr            Float?
+  cpl            Float?
+  seoKeywords    Json?
+  followerGrowth Int?
+  reach          Int?
+  engagement     Float?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Activity {
+  id        String       @id @default(uuid())
+  type      ActivityType
+  note      String
+  leadId    String?
+  lead      Lead?        @relation(fields: [leadId], references: [id])
+  clientId  String?
+  client    Client?      @relation(fields: [clientId], references: [id])
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  createdAt DateTime     @default(now())
+}
+
+enum ActivityType { CALL EMAIL WHATSAPP MEETING NOTE TASK_DONE INVOICE_SENT PAYMENT_RECEIVED }
+
+model Report {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  month     Int
+  year      Int
+  summary   String?
+  pdfUrl    String?
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id          String   @id @default(uuid())
+  agencyName  String   @default("OptiBrandz")
+  logoUrl     String?
+  address     String?
+  bankDetails Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
