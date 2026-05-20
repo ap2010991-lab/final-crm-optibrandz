@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { create } from "zustand";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { DndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, FileText, Gauge, ImageUp, LayoutDashboard, LogOut, Megaphone, Plus, Search, Send, Settings, Sparkles, UploadCloud, Users, Wand2 } from "lucide-react";
+import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Database, FileText, Gauge, ImageUp, LayoutDashboard, LogOut, Megaphone, Plus, Save, Search, Send, Settings, Sparkles, UploadCloud, Users, Wand2 } from "lucide-react";
 import optibrandzLogo from "./assets/optibrandz-logo.png";
 
 const API_URL = import.meta.env.VITE_API_URL || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:3001/api" : "/api");
@@ -50,6 +50,7 @@ const nav = [
   ["Content", "/content", CalendarDays],
   ["Invoices", "/invoices", CircleDollarSign],
   ["Campaigns", "/campaigns", Sparkles],
+  ["Data Editor", "/admin/data", Database],
   ["Team", "/team/workload", Users],
   ["Settings", "/settings", Settings]
 ];
@@ -74,7 +75,7 @@ function Shell({ children }) {
       <nav className="space-y-1 p-3">{nav.map(([label, href, Icon]) => <Link key={href} to={href} className={`sidebar-link ${location.pathname.startsWith(href.startsWith("/team") ? "/team" : href) ? "active" : ""}`}><Icon size={18} />{label}</Link>)}</nav>
       <div className="absolute bottom-0 w-full border-t border-white/10 p-4"><div className="user-strip flex items-center gap-3"><div className="grid size-9 place-items-center rounded-lg bg-[#ffd84d] text-sm font-black text-[#090909]">{user?.avatar || "AP"}</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-white">{user?.name}</div><div className="truncate text-xs text-white/55">{pretty(user?.role)}</div></div><button className="dark-icon-button" onClick={logout} title="Logout"><LogOut size={16} /></button></div></div>
     </aside>
-    <div className="lg:pl-68"><header className="topbar sticky top-0 z-10 flex h-20 items-center gap-3 border-b px-4 backdrop-blur lg:px-6"><div><h1 className="min-w-fit text-lg font-black tracking-tight">{title}</h1><p className="hidden text-xs font-semibold text-zinc-500 sm:block">Turning agency activity into sales, approvals, and renewals.</p></div><div className="relative max-w-xl flex-1"><Search className="pointer-events-none absolute left-3 top-2.5 text-zinc-400" size={18} /><input className="h-10 w-full rounded-full border border-black/10 bg-white/80 pl-10 pr-3 text-sm outline-none focus:border-[#ff7a18] focus:ring-4 focus:ring-[#ff7a18]/15" placeholder="Search clients, leads, invoices" /></div><button className="icon-button relative" title="Notifications"><Bell size={18} />{unread > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ff7a18] text-[10px] font-black text-white">{unread}</span>}</button></header><main className="p-4 pb-24 lg:p-6">{children}</main></div>
+    <div className="lg:pl-68"><header className="topbar sticky top-0 z-10 flex h-20 items-center gap-3 border-b px-4 backdrop-blur lg:px-6"><div><div className="flex items-center gap-2"><h1 className="min-w-fit text-lg font-black tracking-tight">{title}</h1><span className="demo-badge">Demo Data</span></div><p className="hidden text-xs font-semibold text-zinc-500 sm:block">All seeded CRM records are editable from Data Editor.</p></div><div className="relative max-w-xl flex-1"><Search className="pointer-events-none absolute left-3 top-2.5 text-zinc-400" size={18} /><input className="h-10 w-full rounded-full border border-black/10 bg-white/80 pl-10 pr-3 text-sm outline-none focus:border-[#ff7a18] focus:ring-4 focus:ring-[#ff7a18]/15" placeholder="Search clients, leads, invoices" /></div><button className="icon-button relative" title="Notifications"><Bell size={18} />{unread > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ff7a18] text-[10px] font-black text-white">{unread}</span>}</button></header><main className="p-4 pb-24 lg:p-6">{children}</main></div>
     <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/10 bg-[#fff9ed]/95 p-1 backdrop-blur lg:hidden">{nav.slice(0, 5).map(([label, href, Icon]) => <Link key={href} to={href} className="flex flex-col items-center gap-1 rounded-md py-2 text-[11px] font-semibold text-zinc-700"><Icon size={18} />{label}</Link>)}</nav>
   </div>;
 }
@@ -183,6 +184,61 @@ function TeamWorkload() { const { data } = useQuery({ queryKey: ["workload"], qu
 function Portal() { return <div className="space-y-5"><div className="panel"><h2 className="section-title">Client Portal</h2><p className="text-sm text-slate-600">Reports, invoices, and content approvals are filtered to the signed-in client account.</p></div><Invoices /><ContentCalendar /></div>; }
 function SettingsPage() { return <div className="grid gap-5 xl:grid-cols-2"><div className="panel"><h2 className="section-title">Agency Profile</h2><label className="field-label">Agency name</label><input className="input" defaultValue="OptiBrandz Marketing Agency" /><label className="field-label mt-4">Address</label><textarea className="input min-h-24" defaultValue="Vapi, Gujarat, India" /><button className="primary mt-4">Save Settings</button></div><div className="panel"><h2 className="section-title">System Readiness</h2>{["JWT auth", "Role guards", "Prisma schema", "Invoice PDF", "Cron alerts", "Responsive shell"].map((item) => <div key={item} className="flex items-center gap-2 border-b border-slate-100 py-3 text-sm"><CheckCircle2 size={17} className="text-emerald-600" />{item}</div>)}</div></div>; }
 
+function AdminDataEditor() {
+  const [collection, setCollection] = useState("clients");
+  const [draft, setDraft] = useState("");
+  const [message, setMessage] = useState("");
+  const { data, refetch } = useQuery({ queryKey: ["admin-data"], queryFn: () => api("/admin/data") });
+  const collections = data?.data?.collections || {};
+  const keys = Object.keys(collections);
+
+  function loadCollection(nextCollection) {
+    setCollection(nextCollection);
+    setDraft(JSON.stringify(collections[nextCollection] || [], null, 2));
+    setMessage("");
+  }
+
+  useEffect(() => {
+    if (collections[collection]) setDraft(JSON.stringify(collections[collection], null, 2));
+  }, [data, collection]);
+
+  async function saveCollection() {
+    setMessage("");
+    let records;
+    try {
+      records = JSON.parse(draft);
+      if (!Array.isArray(records)) throw new Error("The editor must contain a JSON array.");
+    } catch (err) {
+      setMessage(`Fix JSON first: ${err.message}`);
+      return;
+    }
+    await api(`/admin/data/${collection}`, { method: "PUT", body: JSON.stringify({ records }) });
+    queryClient.invalidateQueries();
+    await refetch();
+    setMessage(`${pretty(collection)} saved. Dashboard and CRM screens now use your edited records.`);
+  }
+
+  return <div className="space-y-5">
+    <section className="hero-panel rounded-2xl p-5 text-white lg:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ffd84d]">Owner tools</p><h2 className="mt-1 text-3xl font-black tracking-tight">Edit every demo CRM record from inside the app.</h2><p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">This is currently demo seed data. Replace clients, leads, invoices, tasks, campaigns, content calendar items, activities, and notifications with your real agency information.</p></div>
+        <span className="hero-status">Editable Demo Data</span>
+      </div>
+    </section>
+    <div className="grid gap-5 xl:grid-cols-[260px_1fr]">
+      <aside className="panel h-fit">
+        <h2 className="section-title">Collections</h2>
+        <div className="mt-4 space-y-2">{keys.map((key) => <button key={key} className={`data-tab ${collection === key ? "active" : ""}`} onClick={() => loadCollection(key)}>{pretty(key)}<span>{collections[key]?.length || 0}</span></button>)}</div>
+      </aside>
+      <section className="panel">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="section-title">{pretty(collection)}</h2><p className="mt-1 text-sm text-zinc-600">Edit JSON, keep it as an array, then save. Changes are live for this running CRM.</p></div><button className="primary" onClick={saveCollection}><Save size={16} /> Save {pretty(collection)}</button></div>
+        <textarea className="json-editor mt-4" value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck="false" />
+        {message && <div className={`mt-3 rounded-xl border p-3 text-sm font-semibold ${message.startsWith("Fix") ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{message}</div>}
+      </section>
+    </div>
+  </div>;
+}
+
 function AIAgent() {
   const [prompt, setPrompt] = useState("What should I focus on today to grow revenue and avoid client risk?");
   const [answer, setAnswer] = useState("");
@@ -285,6 +341,7 @@ function App() {
     <Route path="/content" element={<RequireAuth><ContentCalendar /></RequireAuth>} />
     <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
     <Route path="/campaigns" element={<RequireAuth><Campaigns /></RequireAuth>} />
+    <Route path="/admin/data" element={<RequireAuth roles={["OWNER"]}><AdminDataEditor /></RequireAuth>} />
     <Route path="/team/workload" element={<RequireAuth roles={["OWNER"]}><TeamWorkload /></RequireAuth>} />
     <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
     <Route path="/portal/dashboard" element={<RequireAuth roles={["CLIENT"]}><Portal /></RequireAuth>} />

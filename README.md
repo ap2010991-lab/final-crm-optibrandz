@@ -25,6 +25,14 @@ Demo owner login:
 
 The server includes a seeded in-memory data layer for immediate local testing. The full Prisma schema is included at `server/prisma/schema.prisma` for PostgreSQL deployment.
 
+## Editing Demo Data
+
+The app clearly marks the seeded records as demo data. Log in as the owner and open:
+
+`/admin/data`
+
+From there you can edit Clients, Leads, Service Orders, Tasks, Invoices, Campaigns, Calendar Items, Activities, and Notifications. Save a collection and the running CRM updates immediately.
+
 ## Vercel Deploy
 
 This repo includes `vercel.json` and `api/index.js` so Vercel can build the React client and run the Express API as a serverless function.

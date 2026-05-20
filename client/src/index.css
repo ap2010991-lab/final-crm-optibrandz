@@ -51,6 +51,18 @@ button, input, select, textarea { font: inherit; }
   border-color: rgba(9, 9, 9, 0.1);
   background: rgba(255, 253, 247, 0.9);
 }
+.demo-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #fff3ce;
+  color: #6a4700;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .user-strip {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.06);
@@ -99,6 +111,20 @@ button, input, select, textarea { font: inherit; }
   font-weight: 900;
   letter-spacing: -0.02em;
 }
+.hero-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 14px 18px;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 .panel, .metric-card {
   @apply rounded-xl border p-4;
   border-color: var(--ob-line);
@@ -136,6 +162,52 @@ button, input, select, textarea { font: inherit; }
   background: linear-gradient(180deg, #fffdf7, #fff9ed);
   color: #2b261f;
   padding: 14px;
+}
+.data-tab {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--ob-stone);
+  font-size: 14px;
+  font-weight: 900;
+  text-align: left;
+}
+.data-tab span {
+  border-radius: 999px;
+  background: #f4f1ea;
+  padding: 2px 8px;
+  color: var(--ob-stone);
+  font-size: 12px;
+}
+.data-tab.active {
+  background: linear-gradient(135deg, var(--ob-orange), var(--ob-yellow));
+  color: var(--ob-black);
+}
+.data-tab.active span {
+  background: rgba(9, 9, 9, 0.12);
+  color: var(--ob-black);
+}
+.json-editor {
+  min-height: 560px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #0e0d0c;
+  color: #fff9ed;
+  padding: 16px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  outline: none;
+}
+.json-editor:focus {
+  border-color: var(--ob-orange);
+  box-shadow: 0 0 0 4px rgba(255, 122, 24, 0.14);
 }
 .icon-button { @apply grid size-10 place-items-center rounded-full border bg-white text-zinc-700 transition hover:bg-[#fff9ed]; border-color: rgba(9, 9, 9, 0.12); }
 .dark-icon-button { @apply grid size-10 place-items-center rounded-full border text-white transition; border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.06); }

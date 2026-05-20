@@ -36,6 +36,7 @@ app.use("/api/reports", require("./routes/reports.routes"));
 app.use("/api/notifications", require("./routes/notifications.routes"));
 app.use("/api/search", require("./routes/search.routes"));
 app.use("/api/ai", require("./routes/ai.routes"));
+app.use("/api/admin", require("./routes/admin.routes"));
 
 app.use((err, _req, res, _next) => {
   const status = err.name === "ZodError" ? 422 : 500;
