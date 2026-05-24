@@ -6,7 +6,7 @@ Full-stack CRM platform for OptiBrandz Marketing Agency, built from the supplied
 
 - Client: React, Vite, Tailwind CSS, React Router, Zustand, React Query, Recharts
 - Server: Node.js, Express, JWT, Zod, PDFKit, node-cron
-- Database target: PostgreSQL via Prisma
+- Database target: Supabase Postgres via Prisma
 
 ## Local Run
 
@@ -23,7 +23,7 @@ Demo owner login:
 - Email: `alok@optibrandz.in`
 - Password: `admin123`
 
-The server includes a seeded in-memory data layer for immediate local testing. The full Prisma schema is included at `server/prisma/schema.prisma` for PostgreSQL deployment.
+The server includes a seeded in-memory data layer for immediate local testing. Supabase/Postgres setup is documented in `SUPABASE_SETUP.md`, with the Prisma schema at `server/prisma/schema.prisma`.
 
 ## Editing Demo Data
 
@@ -39,6 +39,8 @@ This repo includes `vercel.json` and `api/index.js` so Vercel can build the Reac
 
 In Vercel, add these environment variables:
 
+- `DATABASE_URL`
+- `DIRECT_URL`
 - `JWT_SECRET`
 - `JWT_EXPIRES_IN=7d`
 - `GEMINI_API_KEY`
