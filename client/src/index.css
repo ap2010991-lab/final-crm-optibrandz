@@ -139,6 +139,70 @@ button, input, select, textarea { font: inherit; }
 .metric-card {
   background: linear-gradient(180deg, #ffffff 0%, #fff9ed 100%);
 }
+.mini-stat {
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.94);
+  padding: 14px;
+  box-shadow: 0 14px 34px rgba(9, 9, 9, 0.06);
+}
+.mini-stat span {
+  display: block;
+  color: var(--ob-stone);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mini-stat strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 950;
+  color: var(--ob-ink);
+}
+.mini-stat p {
+  margin-top: 8px;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.dashboard-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -8px;
+}
+.dashboard-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: #fff3ce;
+  color: #6a4700;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+.dashboard-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.dashboard-list-row {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #ece7dc;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+  color: var(--ob-ink);
+  font-size: 13px;
+  font-weight: 900;
+}
 .section-title { @apply text-sm font-black tracking-tight; color: var(--ob-ink); }
 .primary {
   @apply inline-flex h-10 items-center justify-center gap-2 rounded-full px-4 text-sm font-black transition;
