@@ -78,12 +78,17 @@ button, input, select, textarea { font: inherit; }
 .hero-panel::after {
   content: "";
   position: absolute;
+  pointer-events: none;
   right: -4rem;
   top: -5rem;
   width: 22rem;
   height: 22rem;
   border: 1px solid rgba(255, 216, 77, 0.28);
   border-radius: 999px;
+}
+.hero-panel > * {
+  position: relative;
+  z-index: 1;
 }
 .hero-score {
   position: relative;
@@ -345,6 +350,33 @@ button, input, select, textarea { font: inherit; }
 .input { @apply w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none; border-color: var(--ob-line); }
 .input:focus { border-color: var(--ob-orange); box-shadow: 0 0 0 4px rgba(255, 122, 24, 0.14); }
 .field-label { @apply mb-1 block text-sm font-black; color: var(--ob-stone); }
+.field-help {
+  display: block;
+  margin-top: 6px;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.form-note {
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  background: #fff7ed;
+  color: #7c2d12;
+  padding: 12px;
+}
+.form-note strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+}
+.form-note span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
 .option-grid {
   display: flex;
   flex-wrap: wrap;

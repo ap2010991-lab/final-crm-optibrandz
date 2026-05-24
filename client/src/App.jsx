@@ -222,7 +222,7 @@ function Modal({ title, children, onClose }) {
   </div>;
 }
 
-function Field({ label, value, onChange, type = "text", options, rows = 1, kind }) {
+function Field({ label, value, onChange, type = "text", options, rows = 1, kind, help, placeholder }) {
   if (kind === "multi") {
     const selected = Array.isArray(value) ? value : splitList(value);
     return <label className="block md:col-span-2">
@@ -232,13 +232,15 @@ function Field({ label, value, onChange, type = "text", options, rows = 1, kind 
         const checked = selected.includes(option.value);
         return <button type="button" key={option.value} className={`option-pill ${checked ? "selected" : ""}`} onClick={() => onChange(checked ? selected.filter((current) => current !== option.value) : [...selected, option.value])}>{option.label}</button>;
       })}</div>
+      {help && <span className="field-help">{help}</span>}
     </label>;
   }
   return <label className="block">
     <span className="field-label">{label}</span>
     {options ? <select className="input" value={value || ""} onChange={(e) => onChange(e.target.value)}>{options.map((item) => { const option = typeof item === "string" ? { value: item, label: pretty(item) } : item; return <option key={option.value} value={option.value}>{option.label}</option>; })}</select> :
       rows > 1 ? <textarea className="input" rows={rows} value={value || ""} onChange={(e) => onChange(e.target.value)} /> :
-      <input className="input" type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />}
+      <input className="input" type={type} placeholder={placeholder} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />}
+    {help && <span className="field-help">{help}</span>}
   </label>;
 }
 
@@ -274,7 +276,8 @@ function EditRecordModal({ title, initial = {}, fields, onSubmit, onClose }) {
   }
   return <Modal title={title} onClose={onClose}>
     <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-      {fields.map((field) => <Field key={field.name} label={field.label} type={field.type} kind={field.kind} rows={field.rows} options={field.options} value={field.kind === "multi" ? form[field.name] : Array.isArray(form[field.name]) ? form[field.name].join(", ") : form[field.name]} onChange={(value) => setForm({ ...form, [field.name]: value })} />)}
+      {title.includes("Team Login") && <div className="form-note md:col-span-2"><strong>Login details</strong><span>Enter the staff member email and password, then select exactly which CRM sections they can open from the sidebar. Removing a login disables it immediately.</span></div>}
+      {fields.map((field) => <Field key={field.name} label={field.label} type={field.type} kind={field.kind} rows={field.rows} options={field.options} help={field.help} placeholder={field.placeholder} value={field.kind === "multi" ? form[field.name] : Array.isArray(form[field.name]) ? form[field.name].join(", ") : form[field.name]} onChange={(value) => setForm({ ...form, [field.name]: value })} />)}
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700 md:col-span-2">{error}</div>}
       <div className="flex justify-end gap-3 md:col-span-2"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary" disabled={saving}><Save size={16} /> {saving ? "Saving..." : "Save"}</button></div>
     </form>
@@ -427,12 +430,12 @@ function TeamWorkload() {
   const permissions = data?.permissions || nav.map((item) => item[3]);
   const roles = data?.roles || ["ACCOUNT_MANAGER", "SEO_EXEC", "DESIGNER"];
   const teamFields = [
-    { name: "name", label: "Name" },
-    { name: "email", label: "Login Email" },
-    { name: "password", label: editing?.id ? "New Password (optional)" : "Password" },
-    { name: "phone", label: "Phone" },
-    { name: "role", label: "Role", options: roles },
-    { name: "permissions", label: "Allowed CRM Sections", kind: "multi", options: permissions.map((item) => ({ value: item, label: pretty(item) })) }
+    { name: "name", label: "Team Member Name", placeholder: "Example: Rohan Mehta" },
+    { name: "email", label: "Login Email / Unique ID", placeholder: "team@optibrandz.in", help: "This email becomes their CRM login ID." },
+    { name: "password", label: editing?.id ? "New Password (optional)" : "Password", type: "password", placeholder: "Minimum 6 characters", help: editing?.id ? "Leave blank to keep the old password." : "Share this password only with this team member." },
+    { name: "phone", label: "Phone / WhatsApp", placeholder: "+91 90000 00000" },
+    { name: "role", label: "Role", options: roles.filter((role) => role !== "OWNER") },
+    { name: "permissions", label: "Allowed CRM Sections", kind: "multi", help: "Only selected sections will appear in their sidebar and backend access.", options: permissions.filter((item) => item !== "settings" && item !== "team").map((item) => ({ value: item, label: pretty(item) })) }
   ];
   async function saveMember(payload) {
     const body = { ...payload, permissions: payload.permissions?.length ? payload.permissions : ["dashboard"] };
@@ -446,7 +449,7 @@ function TeamWorkload() {
     await api(`/team/${member.id}`, { method: "DELETE" });
     refetch();
   }
-  return <div className="space-y-5"><section className="hero-panel rounded-2xl p-5 text-white lg:p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ffd84d]">Owner control panel</p><h2 className="mt-1 text-3xl font-black tracking-tight">Create team logins and control CRM access.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">Add a unique email and password for each team member, choose the sections they can open, and remove access anytime.</p></div><button className="primary" onClick={() => setEditing({ role: "ACCOUNT_MANAGER", permissions: ["dashboard"], isActive: true })}><Plus size={16} /> Add Team Login</button></div></section><div className="panel"><div className="toolbar"><h2 className="section-title">Team Access</h2><Badge tone="ACTIVE">{(data?.data || []).filter((item) => item.isActive).length} active</Badge></div><div className="team-grid">{(data?.data || []).map((member) => { const pct = member.totalTasks ? Math.round(member.doneTasks / member.totalTasks * 100) : 0; return <div key={member.id} className={`team-card ${!member.isActive ? "inactive" : ""}`}><div className="flex items-start justify-between gap-3"><div><div className="font-black">{member.name}</div><div className="text-sm font-semibold text-slate-500">{pretty(member.role)}</div><div className="mt-1 text-xs font-semibold text-slate-400">{member.email}</div></div><Badge tone={member.isActive ? "ACTIVE" : "LOST"}>{member.isActive ? "Active" : "Removed"}</Badge></div><div className="mt-4 flex flex-wrap gap-1">{(member.permissions || []).map((item) => <span className="chip" key={item}>{pretty(item)}</span>)}</div><div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>{member.totalTasks || 0} tasks</span><span>{member.overdueTasks || 0} overdue</span></div><div className="mt-4 flex flex-wrap gap-2"><button className="table-action" onClick={() => setEditing({ ...member, password: "" })}><Edit3 size={14} /> Edit</button>{member.role !== "OWNER" && member.isActive && <button className="danger-action" onClick={() => removeMember(member)}><Trash2 size={14} /> Remove Login</button>}</div></div>; })}</div></div>{editing && <EditRecordModal title={editing.id ? "Edit Team Login" : "Create Team Login"} initial={editing} fields={teamFields} onSubmit={saveMember} onClose={() => setEditing(null)} />}</div>;
+  return <div className="space-y-5"><section className="hero-panel rounded-2xl p-5 text-white lg:p-6"><div className="relative z-[1] flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ffd84d]">Owner control panel</p><h2 className="mt-1 text-3xl font-black tracking-tight">Create team logins and control CRM access.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">Add a unique email and password for each team member, choose the sections they can open, and remove access anytime.</p></div><button className="primary" onClick={() => setEditing({ name: "", email: "", password: "team1234", phone: "", role: "ACCOUNT_MANAGER", permissions: ["dashboard"], isActive: true })}><Plus size={16} /> Add Team Login</button></div></section><div className="panel"><div className="toolbar"><h2 className="section-title">Team Access</h2><Badge tone="ACTIVE">{(data?.data || []).filter((item) => item.isActive).length} active</Badge></div><div className="team-grid">{(data?.data || []).map((member) => { const pct = member.totalTasks ? Math.round(member.doneTasks / member.totalTasks * 100) : 0; return <div key={member.id} className={`team-card ${!member.isActive ? "inactive" : ""}`}><div className="flex items-start justify-between gap-3"><div><div className="font-black">{member.name}</div><div className="text-sm font-semibold text-slate-500">{pretty(member.role)}</div><div className="mt-1 text-xs font-semibold text-slate-400">{member.email}</div></div><Badge tone={member.isActive ? "ACTIVE" : "LOST"}>{member.isActive ? "Active" : "Removed"}</Badge></div><div className="mt-4 flex flex-wrap gap-1">{(member.permissions || []).map((item) => <span className="chip" key={item}>{pretty(item)}</span>)}</div><div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>{member.totalTasks || 0} tasks</span><span>{member.overdueTasks || 0} overdue</span></div><div className="mt-4 flex flex-wrap gap-2"><button className="table-action" onClick={() => setEditing({ ...member, password: "" })}><Edit3 size={14} /> Edit</button>{member.role !== "OWNER" && member.isActive && <button className="danger-action" onClick={() => removeMember(member)}><Trash2 size={14} /> Remove Login</button>}</div></div>; })}</div></div>{editing && <EditRecordModal title={editing.id ? "Edit Team Login" : "Create Team Login"} initial={editing} fields={teamFields} onSubmit={saveMember} onClose={() => setEditing(null)} />}</div>;
 }
 function Portal() { return <div className="space-y-5"><div className="panel"><h2 className="section-title">Client Portal</h2><p className="text-sm text-slate-600">Reports, invoices, and content approvals are filtered to the signed-in client account.</p></div><Invoices /><ContentCalendar /></div>; }
 function SettingsPage() {
