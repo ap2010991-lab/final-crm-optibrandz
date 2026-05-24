@@ -27,8 +27,8 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  const body = z.object({ clientId: z.string(), serviceType: z.string(), packageName: z.string().optional(), monthlyValue: z.number(), startDate: z.string().optional(), deliverables: z.any().optional() }).parse(req.body);
-  const order = { id: `s-${Date.now()}`, ...body, startDate: body.startDate || new Date().toISOString(), status: "ACTIVE", deliverables: body.deliverables || {} };
+  const body = z.object({ clientId: z.string(), serviceType: z.string(), packageName: z.string().optional(), monthlyValue: z.number(), startDate: z.string().optional(), status: z.string().default("ACTIVE"), deliverables: z.any().optional() }).parse(req.body);
+  const order = { id: `s-${Date.now()}`, ...body, startDate: body.startDate || new Date().toISOString(), deliverables: body.deliverables || {}, createdAt: new Date().toISOString() };
   serviceOrders.unshift(order);
   const assignee = users.find((user) => user.role === "SEO_EXEC") || users[0];
   (defaults[body.serviceType] || ["Monthly checklist"]).forEach((title, index) => {

@@ -7,6 +7,23 @@ const verifyToken = require("../middleware/verifyToken");
 const router = express.Router();
 router.use(verifyToken);
 
+const invoiceSchema = z.object({
+  clientId: z.string(),
+  lineItems: z.array(z.object({ description: z.string(), amount: z.number() })),
+  dueDate: z.string(),
+  gstAmount: z.number().default(0),
+  paidAmount: z.number().default(0),
+  status: z.string().optional(),
+  notes: z.string().optional()
+});
+
+function totals(invoice) {
+  const amount = invoice.lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  invoice.amount = amount;
+  invoice.totalAmount = amount + Number(invoice.gstAmount || 0);
+  if (!invoice.status) invoice.status = invoice.paidAmount >= invoice.totalAmount ? "PAID" : invoice.paidAmount > 0 ? "PARTIAL" : "PENDING";
+}
+
 router.get("/", (req, res) => {
   const data = invoices.filter((invoice) =>
     (!req.query.clientId || invoice.clientId === req.query.clientId) &&
@@ -16,17 +33,14 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  const body = z.object({ clientId: z.string(), lineItems: z.array(z.object({ description: z.string(), amount: z.number() })), dueDate: z.string(), gstAmount: z.number().default(0), notes: z.string().optional() }).parse(req.body);
-  const amount = body.lineItems.reduce((sum, item) => sum + item.amount, 0);
+  const body = invoiceSchema.parse(req.body);
   const invoice = {
     id: `i-${Date.now()}`,
     invoiceNumber: `OB-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, "0")}`,
-    amount,
-    totalAmount: amount + body.gstAmount,
-    paidAmount: 0,
-    status: "PENDING",
-    ...body
+    ...body,
+    createdAt: new Date().toISOString()
   };
+  totals(invoice);
   invoices.unshift(invoice);
   res.status(201).json({ data: invoice });
 });
@@ -44,6 +58,15 @@ router.get("/:id", (req, res) => {
   const invoice = invoices.find((item) => item.id === req.params.id);
   if (!invoice) return res.status(404).json({ message: "Invoice not found" });
   res.json({ data: { ...invoice, client: clients.find((client) => client.id === invoice.clientId) } });
+});
+
+router.put("/:id", (req, res) => {
+  const invoice = invoices.find((item) => item.id === req.params.id);
+  if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+  const body = invoiceSchema.partial().parse(req.body);
+  Object.assign(invoice, body);
+  totals(invoice);
+  res.json({ data: invoice });
 });
 
 router.put("/:id/pay", (req, res) => {

@@ -16,17 +16,33 @@ router.get("/", (req, res) => {
     (!status || client.status === status) &&
     (!city || client.city === city) &&
     client.businessName.toLowerCase().includes(String(q).toLowerCase())
-  ).map((client) => ({
-    ...client,
-    serviceCount: serviceOrders.filter((order) => order.clientId === client.id && order.status === "ACTIVE").length,
-    mrr: serviceOrders.filter((order) => order.clientId === client.id && order.status === "ACTIVE").reduce((sum, item) => sum + item.monthlyValue, 0)
-  }));
+  ).map((client) => {
+    const activeOrders = serviceOrders.filter((order) => order.clientId === client.id && order.status === "ACTIVE");
+    return {
+      ...client,
+      services: activeOrders.map((order) => order.serviceType),
+      serviceCount: activeOrders.length,
+      mrr: activeOrders.reduce((sum, item) => sum + item.monthlyValue, 0)
+    };
+  });
   res.json({ data, total: data.length });
 });
 
 router.post("/", (req, res) => {
-  const body = z.object({ businessName: z.string(), contactPerson: z.string(), phone: z.string(), email: z.string().optional(), city: z.string().optional(), industry: z.string().optional() }).parse(req.body);
-  const client = { id: `c-${Date.now()}`, ...body, status: "ACTIVE", healthScore: 100, totalValue: 0, services: [] };
+  const body = z.object({
+    businessName: z.string(),
+    contactPerson: z.string(),
+    phone: z.string(),
+    email: z.string().optional(),
+    city: z.string().optional(),
+    industry: z.string().optional(),
+    websiteUrl: z.string().optional(),
+    status: z.string().default("ACTIVE"),
+    healthScore: z.number().default(100),
+    totalValue: z.number().default(0),
+    renewalDate: z.string().optional()
+  }).parse(req.body);
+  const client = { id: `c-${Date.now()}`, ...body, services: [], createdAt: new Date().toISOString() };
   clients.unshift(client);
   res.status(201).json({ data: client });
 });

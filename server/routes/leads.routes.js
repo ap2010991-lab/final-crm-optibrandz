@@ -37,7 +37,13 @@ router.get("/", (req, res) => {
 
 router.post("/", (req, res) => {
   const body = leadSchema.parse(req.body);
-  const lead = { id: `l-${Date.now()}`, ...body, score: scoreLead(body) };
+  const lead = {
+    id: `l-${Date.now()}`,
+    ...body,
+    followUpDate: body.followUpDate || new Date(Date.now() + 86400000).toISOString(),
+    score: scoreLead(body),
+    createdAt: new Date().toISOString()
+  };
   leads.unshift(lead);
   res.status(201).json({ data: lead });
 });
@@ -76,7 +82,8 @@ router.post("/:id/convert", requireRole(["OWNER", "ACCOUNT_MANAGER"]), (req, res
     healthScore: 100,
     totalValue: 0,
     services: lead.serviceInterest,
-    leadId: lead.id
+    leadId: lead.id,
+    createdAt: new Date().toISOString()
   };
   clients.unshift(client);
   Object.assign(lead, { status: "CONVERTED", convertedAt: new Date().toISOString() });

@@ -76,8 +76,42 @@ function Shell({ children }) {
       <nav className="space-y-1 p-3">{nav.map(([label, href, Icon]) => <Link key={href} to={href} className={`sidebar-link ${location.pathname.startsWith(href.startsWith("/team") ? "/team" : href) ? "active" : ""}`}><Icon size={18} />{label}</Link>)}</nav>
       <div className="absolute bottom-0 w-full border-t border-white/10 p-4"><div className="user-strip flex items-center gap-3"><div className="grid size-9 place-items-center rounded-lg bg-[#ffd84d] text-sm font-black text-[#090909]">{user?.avatar || "AP"}</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-white">{user?.name}</div><div className="truncate text-xs text-white/55">{pretty(user?.role)}</div></div><button className="dark-icon-button" onClick={logout} title="Logout"><LogOut size={16} /></button></div></div>
     </aside>
-    <div className="lg:pl-68"><header className="topbar sticky top-0 z-10 flex h-20 items-center gap-3 border-b px-4 backdrop-blur lg:px-6"><div><div className="flex items-center gap-2"><h1 className="min-w-fit text-lg font-black tracking-tight">{title}</h1><span className="demo-badge">Demo Data</span></div><p className="hidden text-xs font-semibold text-zinc-500 sm:block">Use Add and Edit on each page to replace demo records with real CRM data.</p></div><div className="relative max-w-xl flex-1"><Search className="pointer-events-none absolute left-3 top-2.5 text-zinc-400" size={18} /><input className="h-10 w-full rounded-full border border-black/10 bg-white/80 pl-10 pr-3 text-sm outline-none focus:border-[#ff7a18] focus:ring-4 focus:ring-[#ff7a18]/15" placeholder="Search clients, leads, invoices" /></div><div className="relative"><button className="icon-button relative" title="Notifications" onClick={() => setShowNotifications(!showNotifications)}><Bell size={18} />{unread > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ff7a18] text-[10px] font-black text-white">{unread}</span>}</button>{showNotifications && <NotificationPanel items={notificationItems} onClose={() => setShowNotifications(false)} />}</div></header><main className="p-4 pb-24 lg:p-6">{children}</main></div>
+    <div className="lg:pl-68"><header className="topbar sticky top-0 z-10 flex h-20 items-center gap-3 border-b px-4 backdrop-blur lg:px-6"><div><div className="flex items-center gap-2"><h1 className="min-w-fit text-lg font-black tracking-tight">{title}</h1><span className="demo-badge">Demo Data</span></div><p className="hidden text-xs font-semibold text-zinc-500 sm:block">Use Add and Edit on each page to replace demo records with real CRM data.</p></div><SearchBox /><div className="relative"><button className="icon-button relative" title="Notifications" onClick={() => setShowNotifications(!showNotifications)}><Bell size={18} />{unread > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ff7a18] text-[10px] font-black text-white">{unread}</span>}</button>{showNotifications && <NotificationPanel items={notificationItems} onClose={() => setShowNotifications(false)} />}</div></header><main className="p-4 pb-24 lg:p-6">{children}</main></div>
     <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/10 bg-[#fff9ed]/95 p-1 backdrop-blur lg:hidden">{nav.slice(0, 5).map(([label, href, Icon]) => <Link key={href} to={href} className="flex flex-col items-center gap-1 rounded-md py-2 text-[11px] font-semibold text-zinc-700"><Icon size={18} />{label}</Link>)}</nav>
+  </div>;
+}
+
+function SearchBox() {
+  const [term, setTerm] = useState("");
+  const [focused, setFocused] = useState(false);
+  const navigate = useNavigate();
+  const open = focused && term.trim().length >= 2;
+  const { data, isFetching } = useQuery({ queryKey: ["search", term], queryFn: () => api(`/search?q=${encodeURIComponent(term)}`), enabled: open });
+  const groups = [
+    ["Clients", data?.data?.clients || [], (item) => `/clients/${item.id}`, (item) => item.businessName],
+    ["Leads", data?.data?.leads || [], (item) => `/leads/${item.id}`, (item) => `${item.name} · ${item.phone}`],
+    ["Invoices", data?.data?.invoices || [], (item) => "/invoices", (item) => `${item.invoiceNumber} · ${money(item.totalAmount)}`]
+  ];
+  const hasResults = groups.some(([, rows]) => rows.length);
+  function go(path) {
+    setTerm("");
+    setFocused(false);
+    navigate(path);
+  }
+  return <div className="relative max-w-xl flex-1">
+    <Search className="pointer-events-none absolute left-3 top-2.5 text-zinc-400" size={18} />
+    <input className="h-10 w-full rounded-full border border-black/10 bg-white/80 pl-10 pr-3 text-sm outline-none focus:border-[#ff7a18] focus:ring-4 focus:ring-[#ff7a18]/15" placeholder="Search clients, leads, invoices" value={term} onFocus={() => setFocused(true)} onChange={(e) => setTerm(e.target.value)} />
+    {open && <div className="search-popover">
+      {isFetching && <div className="search-empty">Searching CRM...</div>}
+      {!isFetching && !hasResults && <div className="search-empty">No matching CRM records found.</div>}
+      {!isFetching && groups.map(([label, rows, href, title]) => rows.length > 0 && <div key={label} className="py-2">
+        <div className="px-3 pb-1 text-[11px] font-black uppercase tracking-wide text-zinc-400">{label}</div>
+        {rows.map((item) => <button key={item.id} className="search-result" onMouseDown={(event) => { event.preventDefault(); go(href(item)); }}>
+          <span>{title(item)}</span>
+          <ChevronRight size={15} />
+        </button>)}
+      </div>)}
+    </div>}
   </div>;
 }
 
@@ -155,6 +189,8 @@ function refreshCRM() {
   queryClient.invalidateQueries({ queryKey: ["tasks"] });
   queryClient.invalidateQueries({ queryKey: ["invoices"] });
   queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+  queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  queryClient.invalidateQueries({ queryKey: ["workload"] });
 }
 
 function Modal({ title, children, onClose }) {
@@ -307,9 +343,14 @@ function Invoices() {
   const [editing, setEditing] = useState(null);
   const { data } = useQuery({ queryKey: ["invoices"], queryFn: () => api("/invoices") });
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
-  async function saveInvoice(payload) { await api("/invoices", { method: "POST", body: JSON.stringify({ clientId: payload.clientId, dueDate: new Date(payload.dueDate).toISOString(), gstAmount: payload.gstAmount, lineItems: [{ description: payload.description, amount: payload.amount }] }) }); refreshCRM(); }
+  async function saveInvoice(payload) {
+    const body = { clientId: payload.clientId, dueDate: new Date(payload.dueDate).toISOString(), gstAmount: payload.gstAmount, paidAmount: payload.paidAmount, status: payload.status, lineItems: [{ description: payload.description, amount: payload.amount }] };
+    await api(editing?.id ? `/invoices/${editing.id}` : "/invoices", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify(body) });
+    refreshCRM();
+  }
   async function markPaid(row) { await api(`/invoices/${row.id}/pay`, { method: "PUT", body: JSON.stringify({ paidAmount: row.totalAmount }) }); refreshCRM(); }
-  return <div className="panel"><div className="toolbar"><h2 className="section-title">Invoices</h2><button className="primary" onClick={() => setEditing({ clientId: clients?.data?.[0]?.id, description: "Monthly retainer", amount: 0, gstAmount: 0 })}><Plus size={16} /> Create Invoice</button></div><DataTable rows={data?.data || []} columns={["invoiceNumber", "client.businessName", "totalAmount", "status", "dueDate"]} action={(row) => <div className="flex gap-2"><a className="table-action" href={`${API_URL}/invoices/${row.id}/pdf`} target="_blank">PDF</a><button className="table-action" onClick={() => markPaid(row)}>Mark Paid</button></div>} />{editing && <EditRecordModal title="Create Invoice" initial={editing} fields={[{ name: "clientId", label: "Client", options: (clients?.data || []).map((c) => ({ value: c.id, label: c.businessName })) }, { name: "description", label: "Line Item" }, { name: "amount", label: "Amount", kind: "number", type: "number" }, { name: "gstAmount", label: "GST Amount", kind: "number", type: "number" }, { name: "dueDate", label: "Due Date", type: "date" }]} onSubmit={saveInvoice} onClose={() => setEditing(null)} />}</div>;
+  function editInvoice(row) { setEditing({ ...row, description: row.lineItems?.[0]?.description || "Service", amount: row.lineItems?.[0]?.amount || row.amount || 0, dueDate: row.dueDate?.slice?.(0, 10) }); }
+  return <div className="panel"><div className="toolbar"><h2 className="section-title">Invoices</h2><button className="primary" onClick={() => setEditing({ clientId: clients?.data?.[0]?.id, description: "Monthly retainer", amount: 0, gstAmount: 0, paidAmount: 0, status: "PENDING" })}><Plus size={16} /> Create Invoice</button></div><DataTable rows={data?.data || []} columns={["invoiceNumber", "client.businessName", "totalAmount", "status", "dueDate"]} action={(row) => <div className="flex flex-wrap gap-2"><button className="table-action" onClick={() => editInvoice(row)}><Edit3 size={14} /> Edit</button><a className="table-action" href={`${API_URL}/invoices/${row.id}/pdf`} target="_blank">PDF</a><button className="table-action" onClick={() => markPaid(row)} disabled={row.status === "PAID"}>Mark Paid</button></div>} />{editing && <EditRecordModal title={editing.id ? "Edit Invoice" : "Create Invoice"} initial={editing} fields={[{ name: "clientId", label: "Client", options: (clients?.data || []).map((c) => ({ value: c.id, label: c.businessName })) }, { name: "description", label: "Line Item" }, { name: "amount", label: "Amount", kind: "number", type: "number" }, { name: "gstAmount", label: "GST Amount", kind: "number", type: "number" }, { name: "paidAmount", label: "Paid Amount", kind: "number", type: "number" }, { name: "status", label: "Status", options: ["PENDING", "PARTIAL", "PAID", "OVERDUE"] }, { name: "dueDate", label: "Due Date", type: "date" }]} onSubmit={saveInvoice} onClose={() => setEditing(null)} />}</div>;
 }
 function Campaigns() {
   const [editing, setEditing] = useState(null);
@@ -320,7 +361,17 @@ function Campaigns() {
 }
 function TeamWorkload() { const { data } = useQuery({ queryKey: ["workload"], queryFn: () => api("/tasks/workload") }); return <div className="panel"><h2 className="section-title">Team Workload</h2><div className="mt-4 space-y-3">{(data?.data || []).map((user) => { const pct = user.totalTasks ? Math.round(user.doneTasks / user.totalTasks * 100) : 0; return <div key={user.userId} className="rounded-lg border border-slate-200 p-3"><div className="flex items-center justify-between"><div><div className="font-semibold">{user.name}</div><div className="text-sm text-slate-500">{pretty(user.role)}</div></div><Badge tone={user.overdueTasks ? "OVERDUE" : "DONE"}>{user.overdueTasks} overdue</Badge></div><div className="mt-3 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div></div>; })}</div></div>; }
 function Portal() { return <div className="space-y-5"><div className="panel"><h2 className="section-title">Client Portal</h2><p className="text-sm text-slate-600">Reports, invoices, and content approvals are filtered to the signed-in client account.</p></div><Invoices /><ContentCalendar /></div>; }
-function SettingsPage() { return <div className="grid gap-5 xl:grid-cols-2"><div className="panel"><h2 className="section-title">Agency Profile</h2><label className="field-label">Agency name</label><input className="input" defaultValue="OptiBrandz Marketing Agency" /><label className="field-label mt-4">Address</label><textarea className="input min-h-24" defaultValue="Vapi, Gujarat, India" /><button className="primary mt-4">Save Settings</button></div><div className="panel"><h2 className="section-title">System Readiness</h2>{["JWT auth", "Role guards", "Prisma schema", "Invoice PDF", "Cron alerts", "Responsive shell"].map((item) => <div key={item} className="flex items-center gap-2 border-b border-slate-100 py-3 text-sm"><CheckCircle2 size={17} className="text-emerald-600" />{item}</div>)}</div></div>; }
+function SettingsPage() {
+  const stored = JSON.parse(localStorage.getItem("ob_settings") || "null");
+  const [profile, setProfile] = useState(stored || { agencyName: "OptiBrandz Marketing Agency", address: "Vapi, Gujarat, India", whatsapp: "+91 00000 00000", email: "grow@optibrandz.in" });
+  const [saved, setSaved] = useState(false);
+  function saveSettings() {
+    localStorage.setItem("ob_settings", JSON.stringify(profile));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+  return <div className="grid gap-5 xl:grid-cols-2"><div className="panel"><h2 className="section-title">Agency Profile</h2><label className="field-label">Agency name</label><input className="input" value={profile.agencyName} onChange={(e) => setProfile({ ...profile, agencyName: e.target.value })} /><label className="field-label mt-4">Address</label><textarea className="input min-h-24" value={profile.address} onChange={(e) => setProfile({ ...profile, address: e.target.value })} /><label className="field-label mt-4">WhatsApp</label><input className="input" value={profile.whatsapp} onChange={(e) => setProfile({ ...profile, whatsapp: e.target.value })} /><label className="field-label mt-4">Email</label><input className="input" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} /><button className="primary mt-4" onClick={saveSettings}><Save size={16} /> Save Settings</button>{saved && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Settings saved on this browser.</div>}</div><div className="panel"><h2 className="section-title">System Readiness</h2>{["JWT auth", "Role guards", "Editable records", "Invoice PDF", "Daily notifications", "Responsive shell"].map((item) => <div key={item} className="flex items-center gap-2 border-b border-slate-100 py-3 text-sm"><CheckCircle2 size={17} className="text-emerald-600" />{item}</div>)}</div></div>;
+}
 
 function AIAgent() {
   const [prompt, setPrompt] = useState("What should I focus on today to grow revenue and avoid client risk?");

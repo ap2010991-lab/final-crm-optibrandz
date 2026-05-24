@@ -8,8 +8,8 @@ const router = express.Router();
 router.use(verifyToken);
 
 router.post("/", (req, res) => {
-  const body = z.object({ title: z.string(), serviceOrderId: z.string().optional(), assignedToId: z.string(), dueDate: z.string(), priority: z.string().default("MEDIUM") }).parse(req.body);
-  const task = { id: `t-${Date.now()}`, ...body, status: "PENDING" };
+  const body = z.object({ title: z.string(), serviceOrderId: z.string().optional(), assignedToId: z.string(), dueDate: z.string(), priority: z.string().default("MEDIUM"), status: z.string().default("PENDING") }).parse(req.body);
+  const task = { id: `t-${Date.now()}`, ...body, createdAt: new Date().toISOString() };
   tasks.unshift(task);
   res.status(201).json({ data: task });
 });
