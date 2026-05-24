@@ -1,6 +1,6 @@
 const express = require("express");
 const { z } = require("zod");
-const { clients, serviceOrders, invoices, campaigns, calendarItems, activities } = require("../data");
+const { clients, serviceOrders, tasks, invoices, campaigns, calendarItems, activities } = require("../data");
 const verifyToken = require("../middleware/verifyToken");
 
 const router = express.Router();
@@ -8,6 +8,35 @@ router.use(verifyToken);
 
 function visibleClients(user) {
   return user.role === "CLIENT" ? clients.filter((client) => client.id === user.clientId) : clients;
+}
+
+function syncClientServices(clientId, services = []) {
+  const selected = [...new Set(services.map((item) => String(item).trim().toUpperCase().replace(/[\s-]+/g, "_")).filter(Boolean))];
+  const currentOrders = serviceOrders.filter((order) => order.clientId === clientId);
+  selected.forEach((serviceType) => {
+    const existing = currentOrders.find((order) => order.serviceType === serviceType);
+    if (existing) existing.status = "ACTIVE";
+    else serviceOrders.unshift({
+      id: `s-${Date.now()}-${serviceType}`,
+      clientId,
+      serviceType,
+      packageName: "Custom",
+      monthlyValue: 0,
+      startDate: new Date().toISOString(),
+      status: "ACTIVE",
+      deliverables: {},
+      createdAt: new Date().toISOString()
+    });
+  });
+  currentOrders.forEach((order) => {
+    if (!selected.includes(order.serviceType)) order.status = "PAUSED";
+  });
+}
+
+function removeWhere(collection, predicate) {
+  for (let index = collection.length - 1; index >= 0; index -= 1) {
+    if (predicate(collection[index])) collection.splice(index, 1);
+  }
 }
 
 router.get("/", (req, res) => {
@@ -40,10 +69,13 @@ router.post("/", (req, res) => {
     status: z.string().default("ACTIVE"),
     healthScore: z.number().default(100),
     totalValue: z.number().default(0),
-    renewalDate: z.string().optional()
+    renewalDate: z.string().optional(),
+    services: z.array(z.string()).default([])
   }).parse(req.body);
-  const client = { id: `c-${Date.now()}`, ...body, services: [], createdAt: new Date().toISOString() };
+  const { services, ...clientBody } = body;
+  const client = { id: `c-${Date.now()}`, ...clientBody, services: [], createdAt: new Date().toISOString() };
   clients.unshift(client);
+  syncClientServices(client.id, services);
   res.status(201).json({ data: client });
 });
 
@@ -63,14 +95,24 @@ router.get("/:id", (req, res) => {
 router.put("/:id", (req, res) => {
   const client = clients.find((item) => item.id === req.params.id);
   if (!client) return res.status(404).json({ message: "Client not found" });
-  Object.assign(client, req.body);
+  const { services, ...body } = req.body;
+  Object.assign(client, body);
+  if (Array.isArray(services)) syncClientServices(client.id, services);
   res.json({ data: client });
 });
 
 router.delete("/:id", (req, res) => {
-  const client = clients.find((item) => item.id === req.params.id);
+  const index = clients.findIndex((item) => item.id === req.params.id);
+  const client = clients[index];
   if (!client) return res.status(404).json({ message: "Client not found" });
-  client.status = "CHURNED";
+  const serviceIds = serviceOrders.filter((item) => item.clientId === client.id).map((item) => item.id);
+  clients.splice(index, 1);
+  removeWhere(serviceOrders, (item) => item.clientId === client.id);
+  removeWhere(tasks, (item) => serviceIds.includes(item.serviceOrderId));
+  removeWhere(invoices, (item) => item.clientId === client.id);
+  removeWhere(campaigns, (item) => item.clientId === client.id);
+  removeWhere(calendarItems, (item) => item.clientId === client.id);
+  removeWhere(activities, (item) => item.clientId === client.id);
   res.json({ data: client });
 });
 

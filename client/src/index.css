@@ -162,6 +162,15 @@ button, input, select, textarea { font: inherit; }
   color: #6a4700;
 }
 .table-action:hover { background: #ffd84d; color: #090909; }
+.danger-action {
+  @apply inline-flex items-center justify-center gap-1 rounded-full px-3 py-1.5 text-xs font-black transition;
+  background: #fff1f2;
+  color: #be123c;
+}
+.danger-action:hover {
+  background: #ffe4e6;
+  color: #9f1239;
+}
 .secondary-upload {
   @apply inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full border px-4 text-sm font-black transition;
   border-color: var(--ob-line);
@@ -273,6 +282,29 @@ button, input, select, textarea { font: inherit; }
 .input { @apply w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none; border-color: var(--ob-line); }
 .input:focus { border-color: var(--ob-orange); box-shadow: 0 0 0 4px rgba(255, 122, 24, 0.14); }
 .field-label { @apply mb-1 block text-sm font-black; color: var(--ob-stone); }
+.option-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+}
+.option-pill {
+  border: 1px solid var(--ob-line);
+  border-radius: 999px;
+  background: #fffdf7;
+  color: var(--ob-stone);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+.option-pill.selected {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--ob-orange), var(--ob-yellow));
+  color: var(--ob-black);
+}
 .chip { @apply inline-flex items-center rounded-full px-2 py-1 text-xs font-bold; background: #fff3ce; color: #6a4700; }
 .login-stage {
   background:

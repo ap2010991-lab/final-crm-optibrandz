@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { DndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Edit3, FileText, Gauge, ImageUp, LayoutDashboard, LogOut, Megaphone, Plus, Save, Search, Send, Settings, Sparkles, UploadCloud, Users, Wand2, X } from "lucide-react";
+import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Edit3, FileText, Gauge, ImageUp, LayoutDashboard, LogOut, Megaphone, Plus, Save, Search, Send, Settings, Sparkles, Trash2, UploadCloud, Users, Wand2, X } from "lucide-react";
 import optibrandzLogo from "./assets/optibrandz-logo.png";
 
 const API_URL = import.meta.env.VITE_API_URL || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:3001/api" : "/api");
@@ -205,7 +205,18 @@ function Modal({ title, children, onClose }) {
   </div>;
 }
 
-function Field({ label, value, onChange, type = "text", options, rows = 1 }) {
+function Field({ label, value, onChange, type = "text", options, rows = 1, kind }) {
+  if (kind === "multi") {
+    const selected = Array.isArray(value) ? value : splitList(value);
+    return <label className="block md:col-span-2">
+      <span className="field-label">{label}</span>
+      <div className="option-grid">{options.map((item) => {
+        const option = typeof item === "string" ? { value: item, label: pretty(item) } : item;
+        const checked = selected.includes(option.value);
+        return <button type="button" key={option.value} className={`option-pill ${checked ? "selected" : ""}`} onClick={() => onChange(checked ? selected.filter((current) => current !== option.value) : [...selected, option.value])}>{option.label}</button>;
+      })}</div>
+    </label>;
+  }
   return <label className="block">
     <span className="field-label">{label}</span>
     {options ? <select className="input" value={value || ""} onChange={(e) => onChange(e.target.value)}>{options.map((item) => { const option = typeof item === "string" ? { value: item, label: pretty(item) } : item; return <option key={option.value} value={option.value}>{option.label}</option>; })}</select> :
@@ -246,7 +257,7 @@ function EditRecordModal({ title, initial = {}, fields, onSubmit, onClose }) {
   }
   return <Modal title={title} onClose={onClose}>
     <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-      {fields.map((field) => <Field key={field.name} label={field.label} type={field.type} rows={field.rows} options={field.options} value={Array.isArray(form[field.name]) ? form[field.name].join(", ") : form[field.name]} onChange={(value) => setForm({ ...form, [field.name]: value })} />)}
+      {fields.map((field) => <Field key={field.name} label={field.label} type={field.type} kind={field.kind} rows={field.rows} options={field.options} value={field.kind === "multi" ? form[field.name] : Array.isArray(form[field.name]) ? form[field.name].join(", ") : form[field.name]} onChange={(value) => setForm({ ...form, [field.name]: value })} />)}
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700 md:col-span-2">{error}</div>}
       <div className="flex justify-end gap-3 md:col-span-2"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary" disabled={saving}><Save size={16} /> {saving ? "Saving..." : "Save"}</button></div>
     </form>
@@ -293,8 +304,10 @@ function LeadDetail() {
 function Clients() {
   const [editing, setEditing] = useState(null);
   const { data, refetch } = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  const serviceOptions = ["SEO", "SMO", "SMM", "GOOGLE_ADS", "META_ADS", "WEBSITE", "GMB", "CONTENT", "GRAPHIC_DESIGN", "YOUTUBE"];
   const clientFields = [
     { name: "businessName", label: "Business Name" }, { name: "contactPerson", label: "Contact Person" }, { name: "phone", label: "Phone" }, { name: "email", label: "Email" },
+    { name: "services", label: "Services Chosen", kind: "multi", options: serviceOptions },
     { name: "city", label: "City" }, { name: "industry", label: "Industry" }, { name: "websiteUrl", label: "Website" }, { name: "status", label: "Status", options: ["ACTIVE", "ONBOARDING", "PAUSED", "CHURNED"] },
     { name: "healthScore", label: "Health Score", kind: "number", type: "number" }, { name: "totalValue", label: "Total Value", kind: "number", type: "number" }, { name: "renewalDate", label: "Renewal Date", type: "date" }
   ];
@@ -303,7 +316,13 @@ function Clients() {
     await api(editing?.id ? `/clients/${editing.id}` : "/clients", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify(body) });
     refetch();
   }
-  return <div className="space-y-4"><div className="toolbar"><h2 className="section-title">Clients</h2><button className="primary" onClick={() => setEditing({ status: "ACTIVE", healthScore: 100 })}><Plus size={16} /> Add Client</button></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(data?.data || []).map((client) => <div key={client.id} className="panel hover:border-emerald-300"><Link to={`/clients/${client.id}`}><div className="flex items-start gap-3"><div className="grid size-12 place-items-center rounded-lg bg-slate-900 font-bold text-white">{client.businessName.slice(0, 2)}</div><div className="flex-1"><h3 className="font-semibold">{client.businessName}</h3><p className="text-sm text-slate-500">{client.city} · {client.industry}</p></div><Badge tone={client.status}>{pretty(client.status)}</Badge></div><div className="mt-4 flex flex-wrap gap-1">{client.services?.map((item) => <span className="chip" key={item}>{pretty(item)}</span>)}</div><div className="mt-5 grid grid-cols-2 gap-3 text-sm"><Info label="MRR" value={money(client.mrr)} /><Info label="Health" value={`${client.healthScore}%`} /></div></Link><button className="table-action mt-4" onClick={() => setEditing({ ...client, renewalDate: client.renewalDate?.slice?.(0, 10) })}><Edit3 size={14} /> Edit</button></div>)}</div>{editing && <EditRecordModal title={editing.id ? "Edit Client" : "Add Client"} initial={editing} fields={clientFields} onSubmit={saveClient} onClose={() => setEditing(null)} />}</div>;
+  async function deleteClient(client) {
+    if (!window.confirm(`Delete ${client.businessName}? This will remove this client and their linked services, invoices, campaigns, content, and activity from this CRM.`)) return;
+    await api(`/clients/${client.id}`, { method: "DELETE" });
+    refreshCRM();
+    refetch();
+  }
+  return <div className="space-y-4"><div className="toolbar"><h2 className="section-title">Clients</h2><button className="primary" onClick={() => setEditing({ status: "ACTIVE", healthScore: 100, services: [] })}><Plus size={16} /> Add Client</button></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(data?.data || []).map((client) => <div key={client.id} className="panel hover:border-emerald-300"><Link to={`/clients/${client.id}`}><div className="flex items-start gap-3"><div className="grid size-12 place-items-center rounded-lg bg-slate-900 font-bold text-white">{client.businessName.slice(0, 2)}</div><div className="flex-1"><h3 className="font-semibold">{client.businessName}</h3><p className="text-sm text-slate-500">{client.city} · {client.industry}</p></div><Badge tone={client.status}>{pretty(client.status)}</Badge></div><div className="mt-4 flex flex-wrap gap-1">{client.services?.map((item) => <span className="chip" key={item}>{pretty(item)}</span>)}</div><div className="mt-5 grid grid-cols-2 gap-3 text-sm"><Info label="MRR" value={money(client.mrr)} /><Info label="Health" value={`${client.healthScore}%`} /></div></Link><div className="mt-4 flex flex-wrap gap-2"><button className="table-action" onClick={() => setEditing({ ...client, renewalDate: client.renewalDate?.slice?.(0, 10) })}><Edit3 size={14} /> Edit</button><button className="danger-action" onClick={() => deleteClient(client)}><Trash2 size={14} /> Delete</button></div></div>)}</div>{editing && <EditRecordModal title={editing.id ? "Edit Client" : "Add Client"} initial={editing} fields={clientFields} onSubmit={saveClient} onClose={() => setEditing(null)} />}</div>;
 }
 function ClientDetail() {
   const { id } = useParams();
@@ -313,8 +332,8 @@ function ClientDetail() {
   const client = data?.data;
   if (!client) return <div className="panel">Loading client...</div>;
   const tabs = ["Overview", "Services", "Invoices", "Campaigns", "Content", "Activity"];
-  async function saveClient(payload) { await api(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }); refetch(); }
-  return <DetailLayout title={client.businessName} aside={<><Badge tone={client.status}>{pretty(client.status)}</Badge><Info label="Contact" value={`${client.contactPerson} · ${client.phone}`} /><Info label="City" value={client.city} /><Info label="Health" value={`${client.healthScore}%`} /><Info label="Renewal" value={date(client.renewalDate)} /><button className="secondary-button w-full" onClick={() => setEditing(true)}><Edit3 size={16} /> Edit Client</button></>}><div className="tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>{tab === "Overview" && <div className="grid gap-4 md:grid-cols-2"><Info label="Industry" value={client.industry} /><Info label="Website" value={client.websiteUrl} /><Info label="Total Value" value={money(client.totalValue)} /></div>}{tab === "Services" && <DataTable rows={client.services} columns={["serviceType", "packageName", "monthlyValue", "status"]} />}{tab === "Invoices" && <DataTable rows={client.invoices} columns={["invoiceNumber", "totalAmount", "status", "dueDate"]} />}{tab === "Campaigns" && <DataTable rows={client.campaigns} columns={["platform", "adSpend", "leadsGenerated", "ctr", "cpl"]} />}{tab === "Content" && <DataTable rows={client.calendarItems} columns={["platform", "postType", "scheduledDate", "status"]} />}{tab === "Activity" && <Timeline items={client.activities || []} />}{editing && <EditRecordModal title="Edit Client" initial={{ ...client, renewalDate: client.renewalDate?.slice?.(0, 10) }} fields={[{ name: "businessName", label: "Business Name" }, { name: "contactPerson", label: "Contact Person" }, { name: "phone", label: "Phone" }, { name: "email", label: "Email" }, { name: "city", label: "City" }, { name: "industry", label: "Industry" }, { name: "websiteUrl", label: "Website" }, { name: "status", label: "Status", options: ["ACTIVE", "ONBOARDING", "PAUSED", "CHURNED"] }, { name: "healthScore", label: "Health Score", kind: "number", type: "number" }, { name: "totalValue", label: "Total Value", kind: "number", type: "number" }, { name: "renewalDate", label: "Renewal Date", type: "date" }]} onSubmit={saveClient} onClose={() => setEditing(false)} />}</DetailLayout>;
+  async function saveClient(payload) { await api(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }); refreshCRM(); refetch(); }
+  return <DetailLayout title={client.businessName} aside={<><Badge tone={client.status}>{pretty(client.status)}</Badge><Info label="Contact" value={`${client.contactPerson} · ${client.phone}`} /><Info label="City" value={client.city} /><Info label="Health" value={`${client.healthScore}%`} /><Info label="Renewal" value={date(client.renewalDate)} /><button className="secondary-button w-full" onClick={() => setEditing(true)}><Edit3 size={16} /> Edit Client</button></>}><div className="tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>{tab === "Overview" && <div className="grid gap-4 md:grid-cols-2"><Info label="Industry" value={client.industry} /><Info label="Website" value={client.websiteUrl} /><Info label="Total Value" value={money(client.totalValue)} /></div>}{tab === "Services" && <DataTable rows={client.services} columns={["serviceType", "packageName", "monthlyValue", "status"]} />}{tab === "Invoices" && <DataTable rows={client.invoices} columns={["invoiceNumber", "totalAmount", "status", "dueDate"]} />}{tab === "Campaigns" && <DataTable rows={client.campaigns} columns={["platform", "adSpend", "leadsGenerated", "ctr", "cpl"]} />}{tab === "Content" && <DataTable rows={client.calendarItems} columns={["platform", "postType", "scheduledDate", "status"]} />}{tab === "Activity" && <Timeline items={client.activities || []} />}{editing && <EditRecordModal title="Edit Client" initial={{ ...client, services: client.services?.filter((item) => item.status === "ACTIVE").map((item) => item.serviceType), renewalDate: client.renewalDate?.slice?.(0, 10) }} fields={[{ name: "businessName", label: "Business Name" }, { name: "contactPerson", label: "Contact Person" }, { name: "phone", label: "Phone" }, { name: "email", label: "Email" }, { name: "services", label: "Services Chosen", kind: "multi", options: ["SEO", "SMO", "SMM", "GOOGLE_ADS", "META_ADS", "WEBSITE", "GMB", "CONTENT", "GRAPHIC_DESIGN", "YOUTUBE"] }, { name: "city", label: "City" }, { name: "industry", label: "Industry" }, { name: "websiteUrl", label: "Website" }, { name: "status", label: "Status", options: ["ACTIVE", "ONBOARDING", "PAUSED", "CHURNED"] }, { name: "healthScore", label: "Health Score", kind: "number", type: "number" }, { name: "totalValue", label: "Total Value", kind: "number", type: "number" }, { name: "renewalDate", label: "Renewal Date", type: "date" }]} onSubmit={saveClient} onClose={() => setEditing(false)} />}</DetailLayout>;
 }
 
 function Services() {
