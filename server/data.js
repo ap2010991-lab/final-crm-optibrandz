@@ -2,13 +2,14 @@ const bcrypt = require("bcrypt");
 
 const today = new Date();
 const addDays = (days) => new Date(today.getTime() + days * 86400000).toISOString();
+const allPermissions = ["dashboard", "ai", "leads", "clients", "services", "content", "invoices", "campaigns", "team", "settings"];
 
 const users = [
-  { id: "u-owner", name: "Alok Pandey", email: "alok@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "OWNER", avatar: "AP", phone: "+91 87566 46053", isActive: true },
-  { id: "u-am", name: "Nisha Shah", email: "nisha@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "ACCOUNT_MANAGER", avatar: "NS", phone: "+91 90000 00001", isActive: true },
-  { id: "u-seo", name: "Rohan Mehta", email: "rohan@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "SEO_EXEC", avatar: "RM", phone: "+91 90000 00002", isActive: true },
-  { id: "u-design", name: "Kinjal Patel", email: "kinjal@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "DESIGNER", avatar: "KP", phone: "+91 90000 00003", isActive: true },
-  { id: "u-client", name: "Amit Client", email: "client@demo.in", password: bcrypt.hashSync("admin123", 12), role: "CLIENT", avatar: "AC", clientId: "c-1", isActive: true }
+  { id: "u-owner", name: "Alok Pandey", email: "alok@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "OWNER", avatar: "AP", phone: "+91 87566 46053", permissions: allPermissions, isActive: true },
+  { id: "u-am", name: "Nisha Shah", email: "nisha@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "ACCOUNT_MANAGER", avatar: "NS", phone: "+91 90000 00001", permissions: ["dashboard", "leads", "clients", "content", "campaigns"], isActive: true },
+  { id: "u-seo", name: "Rohan Mehta", email: "rohan@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "SEO_EXEC", avatar: "RM", phone: "+91 90000 00002", permissions: ["dashboard", "services", "campaigns"], isActive: true },
+  { id: "u-design", name: "Kinjal Patel", email: "kinjal@optibrandz.in", password: bcrypt.hashSync("admin123", 12), role: "DESIGNER", avatar: "KP", phone: "+91 90000 00003", permissions: ["dashboard", "services", "content"], isActive: true },
+  { id: "u-client", name: "Amit Client", email: "client@demo.in", password: bcrypt.hashSync("admin123", 12), role: "CLIENT", avatar: "AC", clientId: "c-1", permissions: ["portal"], isActive: true }
 ];
 
 const clients = [
@@ -74,4 +75,4 @@ const notifications = [
   { id: "n-2", userId: "u-am", type: "LEAD", message: "Glow Salon follow-up is due today", link: "/leads/l-2", isRead: false, createdAt: addDays(0) }
 ];
 
-module.exports = { users, clients, leads, serviceOrders, tasks, invoices, campaigns, calendarItems, activities, notifications };
+module.exports = { users, clients, leads, serviceOrders, tasks, invoices, campaigns, calendarItems, activities, notifications, allPermissions };

@@ -318,6 +318,22 @@ button, input, select, textarea { font: inherit; }
   padding: 12px;
   font-size: 13px;
 }
+.team-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: 16px;
+}
+.team-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+}
+.team-card.inactive {
+  opacity: 0.62;
+  background: #f8fafc;
+}
 @media (max-width: 1280px) {
   .service-workspace {
     grid-template-columns: 1fr;

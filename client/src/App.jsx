@@ -42,16 +42,16 @@ async function api(path, options = {}) {
 }
 
 const nav = [
-  ["Dashboard", "/dashboard", LayoutDashboard],
-  ["AI Agent", "/ai", Bot],
-  ["Leads", "/leads", Megaphone],
-  ["Clients", "/clients", BriefcaseBusiness],
-  ["Services", "/services", ClipboardList],
-  ["Content", "/content", CalendarDays],
-  ["Invoices", "/invoices", CircleDollarSign],
-  ["Campaigns", "/campaigns", Sparkles],
-  ["Team", "/team/workload", Users],
-  ["Settings", "/settings", Settings]
+  ["Dashboard", "/dashboard", LayoutDashboard, "dashboard"],
+  ["AI Agent", "/ai", Bot, "ai"],
+  ["Leads", "/leads", Megaphone, "leads"],
+  ["Clients", "/clients", BriefcaseBusiness, "clients"],
+  ["Services", "/services", ClipboardList, "services"],
+  ["Content", "/content", CalendarDays, "content"],
+  ["Invoices", "/invoices", CircleDollarSign, "invoices"],
+  ["Campaigns", "/campaigns", Sparkles, "campaigns"],
+  ["Team", "/team/workload", Users, "team"],
+  ["Settings", "/settings", Settings, "settings"]
 ];
 const tones = {
   NEW: "bg-sky-100 text-sky-700 border-sky-200", CONTACTED: "bg-blue-100 text-blue-700 border-blue-200", DEMO_SCHEDULED: "bg-violet-100 text-violet-700 border-violet-200", PROPOSAL_SENT: "bg-amber-100 text-amber-800 border-amber-200", NEGOTIATION: "bg-orange-100 text-orange-800 border-orange-200", CONVERTED: "bg-emerald-100 text-emerald-700 border-emerald-200", LOST: "bg-rose-100 text-rose-700 border-rose-200", PAID: "bg-emerald-100 text-emerald-700 border-emerald-200", PARTIAL: "bg-blue-100 text-blue-700 border-blue-200", OVERDUE: "bg-rose-100 text-rose-700 border-rose-200", PENDING: "bg-amber-100 text-amber-800 border-amber-200", REVIEW: "bg-violet-100 text-violet-700 border-violet-200", DONE: "bg-emerald-100 text-emerald-700 border-emerald-200", ACTIVE: "bg-emerald-100 text-emerald-700 border-emerald-200", ONBOARDING: "bg-blue-100 text-blue-700 border-blue-200"
@@ -72,18 +72,29 @@ function Shell({ children }) {
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const title = nav.find((item) => location.pathname.startsWith(item[1].startsWith("/team") ? "/team" : item[1]))?.[0] || "OptiBrandz CRM";
+  const visibleNav = nav.filter((item) => canAccess(user, item[3]));
   const { data } = useQuery({ queryKey: ["notifications"], queryFn: () => api("/notifications"), enabled: Boolean(user) });
   const notificationItems = data?.data || [];
   const unread = notificationItems.filter((item) => !item.isRead).length || 0;
   return <div className="app-shell min-h-screen text-zinc-950">
     <aside className="brand-sidebar fixed inset-y-0 left-0 z-20 hidden w-68 border-r lg:block">
       <div className="flex h-20 items-center gap-3 border-b border-white/10 px-5"><BrandLogo /><div><div className="font-semibold text-white">Optibrandz</div><div className="text-xs text-white/55">Agency growth CRM</div></div></div>
-      <nav className="space-y-1 p-3">{nav.map(([label, href, Icon]) => <Link key={href} to={href} className={`sidebar-link ${location.pathname.startsWith(href.startsWith("/team") ? "/team" : href) ? "active" : ""}`}><Icon size={18} />{label}</Link>)}</nav>
+      <nav className="space-y-1 p-3">{visibleNav.map(([label, href, Icon]) => <Link key={href} to={href} className={`sidebar-link ${location.pathname.startsWith(href.startsWith("/team") ? "/team" : href) ? "active" : ""}`}><Icon size={18} />{label}</Link>)}</nav>
       <div className="absolute bottom-0 w-full border-t border-white/10 p-4"><div className="user-strip flex items-center gap-3"><div className="grid size-9 place-items-center rounded-lg bg-[#ffd84d] text-sm font-black text-[#090909]">{user?.avatar || "AP"}</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-white">{user?.name}</div><div className="truncate text-xs text-white/55">{pretty(user?.role)}</div></div><button className="dark-icon-button" onClick={logout} title="Logout"><LogOut size={16} /></button></div></div>
     </aside>
     <div className="lg:pl-68"><header className="topbar sticky top-0 z-10 flex h-20 items-center gap-3 border-b px-4 backdrop-blur lg:px-6"><div><div className="flex items-center gap-2"><h1 className="min-w-fit text-lg font-black tracking-tight">{title}</h1><span className="demo-badge">Demo Data</span></div><p className="hidden text-xs font-semibold text-zinc-500 sm:block">Use Add and Edit on each page to replace demo records with real CRM data.</p></div><SearchBox /><div className="relative"><button className="icon-button relative" title="Notifications" onClick={() => setShowNotifications(!showNotifications)}><Bell size={18} />{unread > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ff7a18] text-[10px] font-black text-white">{unread}</span>}</button>{showNotifications && <NotificationPanel items={notificationItems} onClose={() => setShowNotifications(false)} />}</div></header><main className="p-4 pb-24 lg:p-6">{children}</main></div>
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/10 bg-[#fff9ed]/95 p-1 backdrop-blur lg:hidden">{nav.slice(0, 5).map(([label, href, Icon]) => <Link key={href} to={href} className="flex flex-col items-center gap-1 rounded-md py-2 text-[11px] font-semibold text-zinc-700"><Icon size={18} />{label}</Link>)}</nav>
+    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/10 bg-[#fff9ed]/95 p-1 backdrop-blur lg:hidden">{visibleNav.slice(0, 5).map(([label, href, Icon]) => <Link key={href} to={href} className="flex flex-col items-center gap-1 rounded-md py-2 text-[11px] font-semibold text-zinc-700"><Icon size={18} />{label}</Link>)}</nav>
   </div>;
+}
+
+function canAccess(user, permission) {
+  if (!user) return false;
+  if (user.role === "OWNER") return true;
+  return (user.permissions || []).includes(permission);
+}
+
+function firstAllowedPath(user) {
+  return nav.find((item) => canAccess(user, item[3]))?.[1] || "/login";
 }
 
 function SearchBox() {
@@ -120,10 +131,11 @@ function SearchBox() {
   </div>;
 }
 
-function RequireAuth({ children, roles }) {
+function RequireAuth({ children, roles, permission }) {
   const { token, user } = useAuth();
   if (!token) return <Navigate to="/login" replace />;
   if (roles && user && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
+  if (permission && !canAccess(user, permission)) return <Navigate to={firstAllowedPath(user)} replace />;
   return <Shell>{children}</Shell>;
 }
 
@@ -409,7 +421,33 @@ function Campaigns() {
   async function saveCampaign(payload) { await api(editing?.id ? `/campaigns/${editing.id}` : "/campaigns", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify({ ...payload, month: 5, year: 2026 }) }); refreshCRM(); }
   return <div className="grid gap-5 xl:grid-cols-[1fr_.8fr]"><div className="panel"><div className="toolbar"><h2 className="section-title">Campaign Performance</h2><button className="primary" onClick={() => setEditing({ clientId: clients?.data?.[0]?.id, platform: "INSTAGRAM", adSpend: 0, impressions: 0, clicks: 0, ctr: 0, leadsGenerated: 0, cpl: 0 })}><Plus size={16} /> Add Campaign</button></div><DataTable rows={data?.data || []} columns={["platform", "adSpend", "impressions", "clicks", "ctr", "leadsGenerated", "cpl"]} action={(row) => <button className="table-action" onClick={() => setEditing(row)}><Edit3 size={14} /> Edit</button>} /></div><div className="panel"><h2 className="section-title">SEO Keyword Tracker</h2><DataTable rows={data?.data?.[0]?.seoKeywords || []} columns={["keyword", "prev", "current"]} /></div>{editing && <EditRecordModal title={editing.id ? "Edit Campaign" : "Add Campaign"} initial={editing} fields={[{ name: "clientId", label: "Client", options: (clients?.data || []).map((c) => ({ value: c.id, label: c.businessName })) }, { name: "platform", label: "Platform", options: ["GOOGLE_ADS", "INSTAGRAM", "FACEBOOK", "LINKEDIN", "SEO"] }, { name: "adSpend", label: "Ad Spend", kind: "number", type: "number" }, { name: "impressions", label: "Impressions", kind: "number", type: "number" }, { name: "clicks", label: "Clicks", kind: "number", type: "number" }, { name: "ctr", label: "CTR", kind: "number", type: "number" }, { name: "leadsGenerated", label: "Leads Generated", kind: "number", type: "number" }, { name: "cpl", label: "CPL", kind: "number", type: "number" }]} onSubmit={saveCampaign} onClose={() => setEditing(null)} />}</div>;
 }
-function TeamWorkload() { const { data } = useQuery({ queryKey: ["workload"], queryFn: () => api("/tasks/workload") }); return <div className="panel"><h2 className="section-title">Team Workload</h2><div className="mt-4 space-y-3">{(data?.data || []).map((user) => { const pct = user.totalTasks ? Math.round(user.doneTasks / user.totalTasks * 100) : 0; return <div key={user.userId} className="rounded-lg border border-slate-200 p-3"><div className="flex items-center justify-between"><div><div className="font-semibold">{user.name}</div><div className="text-sm text-slate-500">{pretty(user.role)}</div></div><Badge tone={user.overdueTasks ? "OVERDUE" : "DONE"}>{user.overdueTasks} overdue</Badge></div><div className="mt-3 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div></div>; })}</div></div>; }
+function TeamWorkload() {
+  const [editing, setEditing] = useState(null);
+  const { data, refetch } = useQuery({ queryKey: ["team"], queryFn: () => api("/team") });
+  const permissions = data?.permissions || nav.map((item) => item[3]);
+  const roles = data?.roles || ["ACCOUNT_MANAGER", "SEO_EXEC", "DESIGNER"];
+  const teamFields = [
+    { name: "name", label: "Name" },
+    { name: "email", label: "Login Email" },
+    { name: "password", label: editing?.id ? "New Password (optional)" : "Password" },
+    { name: "phone", label: "Phone" },
+    { name: "role", label: "Role", options: roles },
+    { name: "permissions", label: "Allowed CRM Sections", kind: "multi", options: permissions.map((item) => ({ value: item, label: pretty(item) })) }
+  ];
+  async function saveMember(payload) {
+    const body = { ...payload, permissions: payload.permissions?.length ? payload.permissions : ["dashboard"] };
+    if (editing?.id && !body.password) delete body.password;
+    await api(editing?.id ? `/team/${editing.id}` : "/team", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify(body) });
+    refreshCRM();
+    refetch();
+  }
+  async function removeMember(member) {
+    if (!window.confirm(`Remove login for ${member.name}? They will not be able to log in with this ID and password anymore.`)) return;
+    await api(`/team/${member.id}`, { method: "DELETE" });
+    refetch();
+  }
+  return <div className="space-y-5"><section className="hero-panel rounded-2xl p-5 text-white lg:p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ffd84d]">Owner control panel</p><h2 className="mt-1 text-3xl font-black tracking-tight">Create team logins and control CRM access.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">Add a unique email and password for each team member, choose the sections they can open, and remove access anytime.</p></div><button className="primary" onClick={() => setEditing({ role: "ACCOUNT_MANAGER", permissions: ["dashboard"], isActive: true })}><Plus size={16} /> Add Team Login</button></div></section><div className="panel"><div className="toolbar"><h2 className="section-title">Team Access</h2><Badge tone="ACTIVE">{(data?.data || []).filter((item) => item.isActive).length} active</Badge></div><div className="team-grid">{(data?.data || []).map((member) => { const pct = member.totalTasks ? Math.round(member.doneTasks / member.totalTasks * 100) : 0; return <div key={member.id} className={`team-card ${!member.isActive ? "inactive" : ""}`}><div className="flex items-start justify-between gap-3"><div><div className="font-black">{member.name}</div><div className="text-sm font-semibold text-slate-500">{pretty(member.role)}</div><div className="mt-1 text-xs font-semibold text-slate-400">{member.email}</div></div><Badge tone={member.isActive ? "ACTIVE" : "LOST"}>{member.isActive ? "Active" : "Removed"}</Badge></div><div className="mt-4 flex flex-wrap gap-1">{(member.permissions || []).map((item) => <span className="chip" key={item}>{pretty(item)}</span>)}</div><div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>{member.totalTasks || 0} tasks</span><span>{member.overdueTasks || 0} overdue</span></div><div className="mt-4 flex flex-wrap gap-2"><button className="table-action" onClick={() => setEditing({ ...member, password: "" })}><Edit3 size={14} /> Edit</button>{member.role !== "OWNER" && member.isActive && <button className="danger-action" onClick={() => removeMember(member)}><Trash2 size={14} /> Remove Login</button>}</div></div>; })}</div></div>{editing && <EditRecordModal title={editing.id ? "Edit Team Login" : "Create Team Login"} initial={editing} fields={teamFields} onSubmit={saveMember} onClose={() => setEditing(null)} />}</div>;
+}
 function Portal() { return <div className="space-y-5"><div className="panel"><h2 className="section-title">Client Portal</h2><p className="text-sm text-slate-600">Reports, invoices, and content approvals are filtered to the signed-in client account.</p></div><Invoices /><ContentCalendar /></div>; }
 function SettingsPage() {
   const stored = JSON.parse(localStorage.getItem("ob_settings") || "null");
@@ -514,19 +552,19 @@ function App() {
     <Route path="/" element={<Navigate to="/dashboard" replace />} />
     <Route path="/login" element={<Login />} />
     <Route path="/portal/login" element={<Login portal />} />
-    <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-    <Route path="/ai" element={<RequireAuth><AIAgent /></RequireAuth>} />
-    <Route path="/leads" element={<RequireAuth><Leads /></RequireAuth>} />
-    <Route path="/leads/:id" element={<RequireAuth><LeadDetail /></RequireAuth>} />
-    <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
-    <Route path="/clients/:id" element={<RequireAuth><ClientDetail /></RequireAuth>} />
-    <Route path="/services" element={<RequireAuth><Services /></RequireAuth>} />
-    <Route path="/tasks" element={<RequireAuth><Services /></RequireAuth>} />
-    <Route path="/content" element={<RequireAuth><ContentCalendar /></RequireAuth>} />
-    <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
-    <Route path="/campaigns" element={<RequireAuth><Campaigns /></RequireAuth>} />
-    <Route path="/team/workload" element={<RequireAuth roles={["OWNER"]}><TeamWorkload /></RequireAuth>} />
-    <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+    <Route path="/dashboard" element={<RequireAuth permission="dashboard"><Dashboard /></RequireAuth>} />
+    <Route path="/ai" element={<RequireAuth permission="ai"><AIAgent /></RequireAuth>} />
+    <Route path="/leads" element={<RequireAuth permission="leads"><Leads /></RequireAuth>} />
+    <Route path="/leads/:id" element={<RequireAuth permission="leads"><LeadDetail /></RequireAuth>} />
+    <Route path="/clients" element={<RequireAuth permission="clients"><Clients /></RequireAuth>} />
+    <Route path="/clients/:id" element={<RequireAuth permission="clients"><ClientDetail /></RequireAuth>} />
+    <Route path="/services" element={<RequireAuth permission="services"><Services /></RequireAuth>} />
+    <Route path="/tasks" element={<RequireAuth permission="services"><Services /></RequireAuth>} />
+    <Route path="/content" element={<RequireAuth permission="content"><ContentCalendar /></RequireAuth>} />
+    <Route path="/invoices" element={<RequireAuth permission="invoices"><Invoices /></RequireAuth>} />
+    <Route path="/campaigns" element={<RequireAuth permission="campaigns"><Campaigns /></RequireAuth>} />
+    <Route path="/team/workload" element={<RequireAuth roles={["OWNER"]} permission="team"><TeamWorkload /></RequireAuth>} />
+    <Route path="/settings" element={<RequireAuth permission="settings"><SettingsPage /></RequireAuth>} />
     <Route path="/portal/dashboard" element={<RequireAuth roles={["CLIENT"]}><Portal /></RequireAuth>} />
     <Route path="*" element={<RequireAuth><NotFound /></RequireAuth>} />
   </Routes></BrowserRouter></QueryClientProvider>;

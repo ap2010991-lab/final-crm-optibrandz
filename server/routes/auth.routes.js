@@ -29,7 +29,8 @@ router.get("/me", verifyToken, (req, res) => res.json({ user: req.user }));
 
 router.post("/invite", verifyToken, requireRole(["OWNER"]), async (req, res) => {
   const body = z.object({ name: z.string(), email: z.string().email(), role: z.enum(["ACCOUNT_MANAGER", "DESIGNER", "SEO_EXEC", "CLIENT"]), phone: z.string().optional() }).parse(req.body);
-  const user = { id: `u-${Date.now()}`, ...body, password: await bcrypt.hash("admin123", 12), avatar: body.name.split(" ").map((part) => part[0]).join("").slice(0, 2), isActive: true };
+  const permissions = body.role === "DESIGNER" ? ["dashboard", "content", "services"] : body.role === "SEO_EXEC" ? ["dashboard", "services", "campaigns"] : ["dashboard", "leads", "clients"];
+  const user = { id: `u-${Date.now()}`, ...body, permissions, password: await bcrypt.hash("admin123", 12), avatar: body.name.split(" ").map((part) => part[0]).join("").slice(0, 2), isActive: true };
   users.push(user);
   res.status(201).json({ user: publicUser(user), tempPassword: "admin123" });
 });
