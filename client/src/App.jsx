@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { DndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Edit3, FileText, Gauge, ImageUp, LayoutDashboard, LogOut, Megaphone, MessageCircle, Plus, Save, Search, Send, Settings, Sparkles, Trash2, UploadCloud, Users, Wand2, X } from "lucide-react";
+import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Edit3, FileText, Gauge, GripVertical, ImageUp, LayoutDashboard, LogOut, Megaphone, MessageCircle, Plus, Save, Search, Send, Settings, Sparkles, Trash2, UploadCloud, Users, Wand2, X } from "lucide-react";
 import optibrandzLogo from "./assets/optibrandz-logo.png";
 
 const API_URL = import.meta.env.VITE_API_URL || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:3001/api" : "/api");
@@ -291,18 +291,46 @@ function EditRecordModal({ title, initial = {}, fields, onSubmit, onClose }) {
   </Modal>;
 }
 
+function ConfirmActionModal({ title, message, confirmLabel = "Confirm", busyLabel = "Working...", onConfirm, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function confirm() {
+    setBusy(true);
+    setError("");
+    try {
+      await onConfirm();
+      onClose();
+    } catch (err) {
+      setError(err.message || "Action failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <Modal title={title} onClose={onClose}>
+    <div className="space-y-4">
+      <p className="text-sm font-semibold leading-6 text-zinc-600">{message}</p>
+      {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+      <div className="flex justify-end gap-3"><button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="danger-action h-10 px-4" onClick={confirm} disabled={busy}><Trash2 size={16} /> {busy ? busyLabel : confirmLabel}</button></div>
+    </div>
+  </Modal>;
+}
+
 const leadColumns = ["NEW", "CONTACTED", "DEMO_SCHEDULED", "PROPOSAL_SENT", "NEGOTIATION", "CONVERTED", "LOST"];
 function LeadCard({ lead, onDelete }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: lead.id });
-  return <div ref={setNodeRef} style={{ transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined }} {...listeners} {...attributes} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-    <Link to={`/leads/${lead.id}`} className="block"><div className="font-semibold">{lead.name}</div><div className="text-sm text-slate-500">{lead.businessName}</div><div className="mt-3 flex flex-wrap gap-1">{lead.serviceInterest?.map((item) => <span key={item} className="chip">{pretty(item)}</span>)}</div><div className="mt-3 flex items-center justify-between"><Badge tone={lead.status}>{pretty(lead.source)}</Badge><span className="text-xs text-slate-500">{date(lead.followUpDate)}</span></div></Link>
-    <button className="danger-action mt-3" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onDelete(lead); }}><Trash2 size={14} /> Delete</button>
+  return <div ref={setNodeRef} style={{ transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined }} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="flex items-start gap-2">
+      <Link to={`/leads/${lead.id}`} className="min-w-0 flex-1"><div className="font-semibold">{lead.name}</div><div className="text-sm text-slate-500">{lead.businessName}</div><div className="mt-3 flex flex-wrap gap-1">{lead.serviceInterest?.map((item) => <span key={item} className="chip">{pretty(item)}</span>)}</div><div className="mt-3 flex items-center justify-between"><Badge tone={lead.status}>{pretty(lead.source)}</Badge><span className="text-xs text-slate-500">{date(lead.followUpDate)}</span></div></Link>
+      <button type="button" className="drag-handle" title={`Drag ${lead.name}`} aria-label={`Drag ${lead.name}`} {...listeners} {...attributes}><GripVertical size={16} /></button>
+    </div>
+    <button type="button" className="danger-action mt-3" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onDelete(lead); }}><Trash2 size={14} /> Delete</button>
   </div>;
 }
 function LeadColumn({ id, children }) { const { setNodeRef } = useDroppable({ id }); return <div ref={setNodeRef} className="min-h-96 w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-3"><h3 className="mb-3 text-sm font-semibold">{pretty(id)}</h3><div className="space-y-3">{children}</div></div>; }
 function Leads() {
   const [view, setView] = useState("kanban");
   const [editing, setEditing] = useState(null);
+  const [deletingLead, setDeletingLead] = useState(null);
   const { data, refetch } = useQuery({ queryKey: ["leads"], queryFn: () => api("/leads") });
   const leads = data?.data || [];
   async function onDragEnd(event) { if (event.over?.id && event.active?.id) { await api(`/leads/${event.active.id}`, { method: "PUT", body: JSON.stringify({ status: event.over.id }) }); refetch(); } }
@@ -318,12 +346,11 @@ function Leads() {
     refetch();
   }
   async function deleteLead(lead) {
-    if (!window.confirm(`Delete lead ${lead.name}? This will remove the lead and its activity from the CRM.`)) return;
     await api(`/leads/${lead.id}`, { method: "DELETE" });
     refreshCRM();
     refetch();
   }
-  return <div className="space-y-4"><div className="toolbar"><div className="segmented"><button onClick={() => setView("kanban")} className={view === "kanban" ? "active" : ""}>Kanban</button><button onClick={() => setView("table")} className={view === "table" ? "active" : ""}>Table</button></div><button className="primary" onClick={() => setEditing({})}><Plus size={16} /> Add Lead</button></div>{view === "kanban" ? <DndContext onDragEnd={onDragEnd}><div className="flex gap-4 overflow-x-auto pb-2">{leadColumns.map((column) => <LeadColumn key={column} id={column}>{leads.filter((lead) => lead.status === column).map((lead) => <LeadCard key={lead.id} lead={lead} onDelete={deleteLead} />)}</LeadColumn>)}</div></DndContext> : <DataTable rows={leads} columns={["name", "businessName", "source", "status", "score", "followUpDate"]} action={(row) => <div className="flex flex-wrap gap-2"><button className="table-action" onClick={() => setEditing(row)}><Edit3 size={14} /> Edit</button><button className="danger-action" onClick={() => deleteLead(row)}><Trash2 size={14} /> Delete</button></div>} />}{editing && <EditRecordModal title={editing.id ? "Edit Lead" : "Add Lead"} initial={{ source: "WHATSAPP", status: "NEW", serviceInterest: [], ...editing, followUpDate: editing.followUpDate?.slice?.(0, 10) }} fields={leadFields} onSubmit={saveLead} onClose={() => setEditing(null)} />}</div>;
+  return <div className="space-y-4"><div className="toolbar"><div className="segmented"><button onClick={() => setView("kanban")} className={view === "kanban" ? "active" : ""}>Kanban</button><button onClick={() => setView("table")} className={view === "table" ? "active" : ""}>Table</button></div><button className="primary" onClick={() => setEditing({})}><Plus size={16} /> Add Lead</button></div>{view === "kanban" ? <DndContext onDragEnd={onDragEnd}><div className="flex gap-4 overflow-x-auto pb-2">{leadColumns.map((column) => <LeadColumn key={column} id={column}>{leads.filter((lead) => lead.status === column).map((lead) => <LeadCard key={lead.id} lead={lead} onDelete={setDeletingLead} />)}</LeadColumn>)}</div></DndContext> : <DataTable rows={leads} columns={["name", "businessName", "source", "status", "score", "followUpDate"]} action={(row) => <div className="flex flex-wrap gap-2"><button className="table-action" onClick={() => setEditing(row)}><Edit3 size={14} /> Edit</button><button className="danger-action" onClick={() => setDeletingLead(row)}><Trash2 size={14} /> Delete</button></div>} />}{editing && <EditRecordModal title={editing.id ? "Edit Lead" : "Add Lead"} initial={{ source: "WHATSAPP", status: "NEW", serviceInterest: [], ...editing, followUpDate: editing.followUpDate?.slice?.(0, 10) }} fields={leadFields} onSubmit={saveLead} onClose={() => setEditing(null)} />}{deletingLead && <ConfirmActionModal title="Delete Lead" message={`Delete ${deletingLead.name}? This will remove the lead and its activity from the CRM.`} confirmLabel="Delete Lead" busyLabel="Deleting..." onConfirm={() => deleteLead(deletingLead)} onClose={() => setDeletingLead(null)} />}</div>;
 }
 
 function LeadDetail() {
@@ -332,18 +359,18 @@ function LeadDetail() {
   const { data, refetch } = useQuery({ queryKey: ["lead", id], queryFn: () => api(`/leads/${id}`) });
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const lead = data?.data;
   if (!lead) return <div className="panel">Loading lead...</div>;
   async function convert() { const result = await api(`/leads/${id}/convert`, { method: "POST" }); navigate(`/clients/${result.data.id}`); }
   async function logActivity() { await api(`/leads/${id}/activity`, { method: "POST", body: JSON.stringify({ type: "NOTE", note }) }); setNote(""); refetch(); }
   async function saveLead(payload) { await api(`/leads/${id}`, { method: "PUT", body: JSON.stringify(payload) }); refetch(); }
   async function deleteLeadDetail() {
-    if (!window.confirm(`Delete lead ${lead.name}? This will remove the lead and its activity from the CRM.`)) return;
     await api(`/leads/${id}`, { method: "DELETE" });
     refreshCRM();
     navigate("/leads");
   }
-  return <DetailLayout title={lead.businessName || lead.name} aside={<><Badge tone={lead.status}>{pretty(lead.status)}</Badge><Info label="Contact" value={`${lead.name} · ${lead.phone}`} /><Info label="Interest" value={lead.serviceInterest?.map(pretty).join(", ")} /><Info label="Score" value={lead.score} /><button className="secondary-button w-full" onClick={() => setEditing(true)}><Edit3 size={16} /> Edit Lead</button><button className="primary w-full" onClick={convert}>Convert to Client</button><button className="danger-action h-10 w-full" onClick={deleteLeadDetail}><Trash2 size={16} /> Delete Lead</button></>}><h2 className="section-title">Activity Timeline</h2><div className="mt-3 flex gap-2"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Log call, WhatsApp, or note" /><button className="primary" onClick={logActivity}>Log</button></div><Timeline items={lead.activities || []} />{editing && <EditRecordModal title="Edit Lead" initial={lead} fields={[{ name: "name", label: "Contact Name" }, { name: "phone", label: "Phone" }, { name: "email", label: "Email" }, { name: "businessName", label: "Business Name" }, { name: "city", label: "City" }, { name: "status", label: "Status", options: leadColumns }, { name: "serviceInterest", label: "Services", kind: "list" }, { name: "budget", label: "Budget" }, { name: "notes", label: "Notes", rows: 3 }]} onSubmit={saveLead} onClose={() => setEditing(false)} />}</DetailLayout>;
+  return <DetailLayout title={lead.businessName || lead.name} aside={<><Badge tone={lead.status}>{pretty(lead.status)}</Badge><Info label="Contact" value={`${lead.name} · ${lead.phone}`} /><Info label="Interest" value={lead.serviceInterest?.map(pretty).join(", ")} /><Info label="Score" value={lead.score} /><button className="secondary-button w-full" onClick={() => setEditing(true)}><Edit3 size={16} /> Edit Lead</button><button className="primary w-full" onClick={convert}>Convert to Client</button><button className="danger-action h-10 w-full" onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> Delete Lead</button></>}><h2 className="section-title">Activity Timeline</h2><div className="mt-3 flex gap-2"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Log call, WhatsApp, or note" /><button className="primary" onClick={logActivity}>Log</button></div><Timeline items={lead.activities || []} />{editing && <EditRecordModal title="Edit Lead" initial={lead} fields={[{ name: "name", label: "Contact Name" }, { name: "phone", label: "Phone" }, { name: "email", label: "Email" }, { name: "businessName", label: "Business Name" }, { name: "city", label: "City" }, { name: "status", label: "Status", options: leadColumns }, { name: "serviceInterest", label: "Services", kind: "list" }, { name: "budget", label: "Budget" }, { name: "notes", label: "Notes", rows: 3 }]} onSubmit={saveLead} onClose={() => setEditing(false)} />}{confirmDelete && <ConfirmActionModal title="Delete Lead" message={`Delete ${lead.name}? This will remove the lead and its activity from the CRM.`} confirmLabel="Delete Lead" busyLabel="Deleting..." onConfirm={deleteLeadDetail} onClose={() => setConfirmDelete(false)} />}</DetailLayout>;
 }
 
 function Clients() {
@@ -468,7 +495,7 @@ function SettingsPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
-  return <div className="grid gap-5 xl:grid-cols-2"><div className="panel"><h2 className="section-title">Agency Profile</h2><label className="field-label">Agency name</label><input className="input" value={profile.agencyName} onChange={(e) => setProfile({ ...profile, agencyName: e.target.value })} /><label className="field-label mt-4">Address</label><textarea className="input min-h-24" value={profile.address} onChange={(e) => setProfile({ ...profile, address: e.target.value })} /><label className="field-label mt-4">WhatsApp</label><input className="input" value={profile.whatsapp} onChange={(e) => setProfile({ ...profile, whatsapp: e.target.value })} /><label className="field-label mt-4">Email</label><input className="input" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} /><button className="primary mt-4" onClick={saveSettings}><Save size={16} /> Save Settings</button>{saved && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Settings saved on this browser.</div>}</div><div className="panel"><h2 className="section-title">System Readiness</h2>{["JWT auth", "Role guards", "Editable records", "Invoice PDF", "Daily notifications", "Responsive shell"].map((item) => <div key={item} className="flex items-center gap-2 border-b border-slate-100 py-3 text-sm"><CheckCircle2 size={17} className="text-emerald-600" />{item}</div>)}</div></div>;
+  return <div className="grid gap-5 xl:grid-cols-2"><div className="panel"><h2 className="section-title">Agency Profile</h2><label className="block"><span className="field-label">Agency name</span><input className="input" value={profile.agencyName} onChange={(e) => setProfile({ ...profile, agencyName: e.target.value })} /></label><label className="mt-4 block"><span className="field-label">Address</span><textarea className="input min-h-24" value={profile.address} onChange={(e) => setProfile({ ...profile, address: e.target.value })} /></label><label className="mt-4 block"><span className="field-label">WhatsApp</span><input className="input" value={profile.whatsapp} onChange={(e) => setProfile({ ...profile, whatsapp: e.target.value })} /></label><label className="mt-4 block"><span className="field-label">Email</span><input className="input" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} /></label><button className="primary mt-4" onClick={saveSettings}><Save size={16} /> Save Settings</button>{saved && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Settings saved on this browser.</div>}</div><div className="panel"><h2 className="section-title">System Readiness</h2>{["JWT auth", "Role guards", "Editable records", "Invoice PDF", "Daily notifications", "Responsive shell"].map((item) => <div key={item} className="flex items-center gap-2 border-b border-slate-100 py-3 text-sm"><CheckCircle2 size={17} className="text-emerald-600" />{item}</div>)}</div></div>;
 }
 
 function AIAgent() {

@@ -240,6 +240,18 @@ button, input, select, textarea { font: inherit; }
   background: #ffe4e6;
   color: #9f1239;
 }
+.danger-action:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+.drag-handle {
+  @apply grid size-8 shrink-0 place-items-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition;
+  touch-action: none;
+}
+.drag-handle:hover {
+  background: #fff3ce;
+  color: #6a4700;
+}
 .whatsapp-action {
   @apply inline-flex items-center justify-center gap-1 rounded-full px-3 py-1.5 text-xs font-black transition;
   background: #dcfce7;
