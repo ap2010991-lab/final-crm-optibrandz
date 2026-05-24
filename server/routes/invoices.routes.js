@@ -14,6 +14,7 @@ const invoiceSchema = z.object({
   gstAmount: z.number().default(0),
   paidAmount: z.number().default(0),
   status: z.string().optional(),
+  clientPhone: z.string().optional(),
   notes: z.string().optional()
 });
 

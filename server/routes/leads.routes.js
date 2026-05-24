@@ -61,6 +61,17 @@ router.put("/:id", (req, res) => {
   res.json({ data: lead });
 });
 
+router.delete("/:id", (req, res) => {
+  const index = leads.findIndex((item) => item.id === req.params.id);
+  const lead = leads[index];
+  if (!lead) return res.status(404).json({ message: "Lead not found" });
+  leads.splice(index, 1);
+  for (let itemIndex = activities.length - 1; itemIndex >= 0; itemIndex -= 1) {
+    if (activities[itemIndex].leadId === lead.id) activities.splice(itemIndex, 1);
+  }
+  res.json({ data: lead });
+});
+
 router.post("/:id/activity", (req, res) => {
   const body = z.object({ type: z.string(), note: z.string().min(1) }).parse(req.body);
   const activity = { id: `a-${Date.now()}`, ...body, leadId: req.params.id, userId: req.user.id, createdAt: new Date().toISOString() };
