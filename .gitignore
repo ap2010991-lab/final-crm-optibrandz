@@ -8,3 +8,4 @@ server/prisma/migrations
 qa-*.png
 final-*.png
 optibrandz-website-reference.png
+.vercel
