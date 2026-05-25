@@ -1,7 +1,7 @@
 const today = new Date();
 const addDays = (days) => new Date(today.getTime() + days * 86400000).toISOString();
 const allPermissions = ["dashboard", "ai", "leads", "clients", "services", "content", "invoices", "campaigns", "reports", "team", "settings"];
-const adminPasswordHash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMeSSSmk5eGkXIKfZe.tF5GVKK";
+const adminPasswordHash = "$2b$12$rtehpqGl1mYNt7GQBX7zKude7Yze/z7G..XE3ldUoCgvXJ9f1tHL.";
 
 const users = [
   { id: "u-owner", name: "Alok Pandey", email: "alok@optibrandz.in", password: adminPasswordHash, role: "OWNER", avatar: "AP", phone: "+91 87566 46053", permissions: allPermissions, isActive: true },
