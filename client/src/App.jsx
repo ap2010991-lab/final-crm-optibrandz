@@ -34,7 +34,8 @@ async function api(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: { "Content-Type": "application/json", ...useAuth.getState().headers(), ...(options.headers || {}) },
-    credentials: "include"
+    credentials: "include",
+    cache: "no-store"
   });
   if (!response.ok) throw new Error((await response.json()).message || "Request failed");
   return response.json();

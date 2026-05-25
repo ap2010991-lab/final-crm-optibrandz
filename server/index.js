@@ -27,6 +27,10 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, name: "OptiBrandz CRM API" }));
 app.use("/api/auth", require("./routes/auth.routes"));
