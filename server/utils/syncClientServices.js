@@ -13,7 +13,37 @@ async function defaultAssigneeId() {
   return user?.id;
 }
 
-async function syncClientServices(clientId, services = []) {
+function amount(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+async function setClientMrr(clientId, monthlyRetainer) {
+  const target = amount(monthlyRetainer);
+  const activeOrders = await prisma.serviceOrder.findMany({
+    where: { clientId, status: "ACTIVE" },
+    orderBy: { createdAt: "asc" }
+  });
+  if (!activeOrders.length) {
+    if (target > 0) {
+      const error = new Error("Choose at least one active service before entering a monthly retainer.");
+      error.status = 422;
+      throw error;
+    }
+    return [];
+  }
+
+  const existingTotal = activeOrders.reduce((sum, order) => sum + amount(order.monthlyValue), 0);
+  let remaining = target;
+  return Promise.all(activeOrders.map((order, index) => {
+    const monthlyValue = index === activeOrders.length - 1
+      ? amount(remaining)
+      : amount(existingTotal > 0 ? target * amount(order.monthlyValue) / existingTotal : index === 0 ? target : 0);
+    remaining = amount(remaining - monthlyValue);
+    return prisma.serviceOrder.update({ where: { id: order.id }, data: { monthlyValue } });
+  }));
+}
+
+async function syncClientServices(clientId, services = [], monthlyRetainer) {
   const selected = normalizeServices(services);
   const currentOrders = await prisma.serviceOrder.findMany({ where: { clientId } });
   const assigneeId = await defaultAssigneeId();
@@ -57,7 +87,9 @@ async function syncClientServices(clientId, services = []) {
     data: { status: "PAUSED" }
   });
 
+  if (monthlyRetainer !== undefined) await setClientMrr(clientId, monthlyRetainer);
+
   return output.concat(currentOrders.filter((order) => !selectedSet.has(order.serviceType)));
 }
 
-module.exports = { syncClientServices, normalizeServices, defaultAssigneeId };
+module.exports = { syncClientServices, setClientMrr, normalizeServices, defaultAssigneeId };

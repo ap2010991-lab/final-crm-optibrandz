@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
-const { syncClientServices } = require("../utils/syncClientServices");
+const { syncClientServices, setClientMrr } = require("../utils/syncClientServices");
 
 const router = express.Router();
 
@@ -17,6 +17,7 @@ const clientSchema = z.object({
   status: z.string().default("ACTIVE"),
   healthScore: z.number().default(100),
   totalValue: z.number().default(0),
+  mrr: z.number().min(0).optional(),
   renewalDate: z.string().optional().nullable(),
   services: z.array(z.string()).default([])
 });
@@ -33,6 +34,18 @@ function toClientResponse(client) {
     serviceCount: activeOrders.length,
     mrr: activeOrders.reduce((sum, item) => sum + Number(item.monthlyValue || 0), 0)
   };
+}
+
+function mrrFor(client) {
+  return (client.services || []).filter((order) => order.status === "ACTIVE").reduce((sum, order) => sum + Number(order.monthlyValue || 0), 0);
+}
+
+function requireMrrService(mrr, services) {
+  if (mrr > 0 && Array.isArray(services) && services.length === 0) {
+    const error = new Error("Choose at least one service before entering a monthly retainer.");
+    error.status = 422;
+    throw error;
+  }
 }
 
 router.get("/", asyncRoute(async (req, res) => {
@@ -53,11 +66,12 @@ router.get("/", asyncRoute(async (req, res) => {
 
 router.post("/", asyncRoute(async (req, res) => {
   const body = clientSchema.parse(req.body);
-  const { services, renewalDate, ...clientBody } = body;
+  const { services, mrr, renewalDate, ...clientBody } = body;
+  requireMrrService(mrr, services);
   const client = await prisma.client.create({
     data: { ...clientBody, renewalDate: renewalDate ? new Date(renewalDate) : null }
   });
-  await syncClientServices(client.id, services);
+  await syncClientServices(client.id, services, mrr);
   res.status(201).json({ data: client });
 }));
 
@@ -73,17 +87,23 @@ router.get("/:id", asyncRoute(async (req, res) => {
     }
   });
   if (!client) return res.status(404).json({ message: "Client not found" });
-  res.json({ data: client });
+  res.json({ data: { ...client, mrr: mrrFor(client) } });
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
   const body = clientSchema.partial().parse(req.body);
-  const { services, renewalDate, ...rest } = body;
+  const { services, mrr, renewalDate, ...rest } = body;
+  requireMrrService(mrr, services);
+  if (mrr > 0 && services === undefined) {
+    const activeServiceCount = await prisma.serviceOrder.count({ where: { clientId: req.params.id, status: "ACTIVE" } });
+    requireMrrService(mrr, activeServiceCount ? undefined : []);
+  }
   const client = await prisma.client.update({
     where: { id: req.params.id },
     data: { ...rest, ...(renewalDate !== undefined ? { renewalDate: renewalDate ? new Date(renewalDate) : null } : {}) }
   });
-  if (Array.isArray(services)) await syncClientServices(client.id, services);
+  if (Array.isArray(services)) await syncClientServices(client.id, services, mrr);
+  else if (mrr !== undefined) await setClientMrr(client.id, mrr);
   res.json({ data: client });
 }));
 
