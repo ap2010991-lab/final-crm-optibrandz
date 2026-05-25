@@ -1,47 +1,62 @@
 const express = require("express");
 const { z } = require("zod");
-const { serviceOrders, tasks, users } = require("../data");
-const verifyToken = require("../middleware/verifyToken");
-const requireRole = require("../middleware/requireRole");
+const prisma = require("../db/prisma");
+const asyncRoute = require("../utils/asyncRoute");
+const { serviceTaskDefaults } = require("../utils/serviceDefaults");
+const { defaultAssigneeId } = require("../utils/syncClientServices");
 
 const router = express.Router();
-router.use(verifyToken);
 
-const defaults = {
-  SEO: ["Track 10 keywords", "Submit monthly SEO report"],
-  SMO: ["Create 26 posts/reels", "Schedule all content", "Engagement monitoring"],
-  SMM: ["Campaign planning", "Creative review", "Lead response audit"],
-  GOOGLE_ADS: ["Optimize ad campaigns", "Generate leads report", "A/B test creatives"],
-  META_ADS: ["Refresh audiences", "A/B test creatives", "Generate leads report"],
-  YOUTUBE: ["Optimize 30 videos", "Thumbnail review", "Monthly analytics report"],
-  GMB: ["Optimize 10 keywords", "Post weekly updates", "Review management"],
-  WEBSITE: ["Development milestone check", "Content upload", "QA testing"],
-  GRAPHIC_DESIGN: ["Create design batch", "Internal review", "Client revisions"],
-  INFLUENCER: ["Shortlist creators", "Approve reel scripts", "Campaign report"],
-  CONTENT: ["Write captions", "Prepare blogs", "Campaign copy review"]
-};
-
-router.get("/", (req, res) => {
-  const data = serviceOrders.filter((item) => !req.query.clientId || item.clientId === req.query.clientId);
-  res.json({ data });
+const serviceSchema = z.object({
+  clientId: z.string(),
+  serviceType: z.string(),
+  packageName: z.string().optional(),
+  monthlyValue: z.number(),
+  startDate: z.string().optional(),
+  status: z.string().default("ACTIVE"),
+  deliverables: z.any().optional()
 });
 
-router.post("/", (req, res) => {
-  const body = z.object({ clientId: z.string(), serviceType: z.string(), packageName: z.string().optional(), monthlyValue: z.number(), startDate: z.string().optional(), status: z.string().default("ACTIVE"), deliverables: z.any().optional() }).parse(req.body);
-  const order = { id: `s-${Date.now()}`, ...body, startDate: body.startDate || new Date().toISOString(), deliverables: body.deliverables || {}, createdAt: new Date().toISOString() };
-  serviceOrders.unshift(order);
-  const assignee = users.find((user) => user.role === "SEO_EXEC") || users[0];
-  (defaults[body.serviceType] || ["Monthly checklist"]).forEach((title, index) => {
-    tasks.push({ id: `t-${Date.now()}-${index}`, title, serviceOrderId: order.id, assignedToId: assignee.id, status: "PENDING", priority: "MEDIUM", dueDate: new Date(Date.now() + (index + 2) * 86400000).toISOString() });
+router.get("/", asyncRoute(async (req, res) => {
+  const data = await prisma.serviceOrder.findMany({
+    where: req.query.clientId ? { clientId: String(req.query.clientId) } : {},
+    orderBy: { createdAt: "desc" }
   });
-  res.status(201).json({ data: order });
-});
+  res.json({ data });
+}));
 
-router.put("/:id", (req, res) => {
-  const order = serviceOrders.find((item) => item.id === req.params.id);
-  if (!order) return res.status(404).json({ message: "Service order not found" });
-  Object.assign(order, req.body);
+router.post("/", asyncRoute(async (req, res) => {
+  const body = serviceSchema.parse(req.body);
+  const order = await prisma.serviceOrder.create({
+    data: {
+      ...body,
+      startDate: body.startDate ? new Date(body.startDate) : new Date(),
+      deliverables: body.deliverables || {}
+    }
+  });
+  const assigneeId = await defaultAssigneeId();
+  if (assigneeId) {
+    await prisma.task.createMany({
+      data: (serviceTaskDefaults[body.serviceType] || ["Monthly checklist"]).map((title, index) => ({
+        title,
+        serviceOrderId: order.id,
+        assignedToId: assigneeId,
+        status: "PENDING",
+        priority: "MEDIUM",
+        dueDate: new Date(Date.now() + (index + 2) * 86400000)
+      }))
+    });
+  }
+  res.status(201).json({ data: order });
+}));
+
+router.put("/:id", asyncRoute(async (req, res) => {
+  const body = serviceSchema.partial().parse(req.body);
+  const order = await prisma.serviceOrder.update({
+    where: { id: req.params.id },
+    data: { ...body, ...(body.startDate ? { startDate: new Date(body.startDate) } : {}) }
+  });
   res.json({ data: order });
-});
+}));
 
 module.exports = router;

@@ -1,15 +1,23 @@
-const { clients, leads, invoices, tasks, campaigns, calendarItems } = require("../data");
+const prisma = require("../db/prisma");
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-function crmSnapshot() {
+async function crmSnapshot() {
+  const [clients, leads, invoices, tasks, campaigns, calendarItems] = await Promise.all([
+    prisma.client.findMany({ include: { services: true }, take: 25 }),
+    prisma.lead.findMany({ take: 25 }),
+    prisma.invoice.findMany({ take: 25 }),
+    prisma.task.findMany({ where: { status: { not: "DONE" } }, take: 25 }),
+    prisma.campaignLog.findMany({ take: 25 }),
+    prisma.contentCalendar.count()
+  ]);
   return {
-    clients: clients.map(({ id, businessName, city, industry, healthScore, status, services, renewalDate }) => ({ id, businessName, city, industry, healthScore, status, services, renewalDate })),
+    clients: clients.map(({ id, businessName, city, industry, healthScore, status, services, renewalDate }) => ({ id, businessName, city, industry, healthScore, status, services: services.map((item) => item.serviceType), renewalDate })),
     leads: leads.map(({ id, name, businessName, city, source, status, serviceInterest, score, followUpDate, notes }) => ({ id, name, businessName, city, source, status, serviceInterest, score, followUpDate, notes })),
     invoices: invoices.map(({ invoiceNumber, clientId, totalAmount, paidAmount, status, dueDate }) => ({ invoiceNumber, clientId, totalAmount, paidAmount, status, dueDate })),
-    openTasks: tasks.filter((task) => task.status !== "DONE").map(({ title, status, priority, dueDate }) => ({ title, status, priority, dueDate })),
+    openTasks: tasks.map(({ title, status, priority, dueDate }) => ({ title, status, priority, dueDate })),
     campaigns: campaigns.map(({ clientId, platform, adSpend, leadsGenerated, ctr, cpl, engagement }) => ({ clientId, platform, adSpend, leadsGenerated, ctr, cpl, engagement })),
-    calendarLoad: calendarItems.length
+    calendarLoad: calendarItems
   };
 }
 
@@ -24,10 +32,7 @@ async function callGemini(parts, systemInstruction) {
   const response = await ai.models.generateContent({
     model: MODEL,
     contents: [{ role: "user", parts }],
-    config: {
-      systemInstruction,
-      temperature: 0.45
-    }
+    config: { systemInstruction, temperature: 0.45 }
   });
   return response.text || "No response generated.";
 }
@@ -45,12 +50,12 @@ function fallbackResponse(type, input = {}) {
   return options[type];
 }
 
-function systemPrompt(user) {
+async function systemPrompt(user) {
   return `You are Optibrandz AI Growth Agent inside a CRM for Optibrandz Marketing Agency in Vapi, Gujarat.
 Be practical, concise, sales-aware, and agency-operations focused.
 Use Indian business context, WhatsApp-friendly wording, and INR where needed.
-Current signed-in user: ${user?.name || "CRM user"} (${user?.role || "TEAM"}).
-CRM snapshot JSON: ${JSON.stringify(crmSnapshot())}`;
+Current signed-in user: ${user?.name || "CRM user"} (${user?.role || "ACCOUNT_MANAGER"}).
+CRM snapshot JSON: ${JSON.stringify(await crmSnapshot())}`;
 }
 
 module.exports = { callGemini, fallbackResponse, hasGeminiKey, systemPrompt };

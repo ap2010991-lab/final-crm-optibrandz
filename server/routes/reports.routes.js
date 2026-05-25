@@ -1,32 +1,30 @@
 const express = require("express");
-const { clients, campaigns } = require("../data");
-const verifyToken = require("../middleware/verifyToken");
+const { z } = require("zod");
+const prisma = require("../db/prisma");
+const asyncRoute = require("../utils/asyncRoute");
 
-const reports = [];
 const router = express.Router();
-router.use(verifyToken);
 
-router.post("/generate", (req, res) => {
-  const { clientId, month, year, nextMonthPlan = "Continue optimization and report weekly progress." } = req.body;
-  const client = clients.find((item) => item.id === clientId);
-  const report = {
-    id: `r-${Date.now()}`,
-    clientId,
-    month,
-    year,
-    summary: `This month we managed ${(client?.services || []).length} services for ${client?.businessName || "client"}. ${nextMonthPlan}`,
-    pdfUrl: `/api/reports/${Date.now()}.pdf`,
-    sentAt: null,
-    createdAt: new Date().toISOString(),
-    campaignCount: campaigns.filter((item) => item.clientId === clientId && item.month === month && item.year === year).length
-  };
-  reports.unshift(report);
-  res.status(201).json({ data: report });
-});
+router.post("/generate", asyncRoute(async (req, res) => {
+  const body = z.object({ clientId: z.string(), month: z.number(), year: z.number(), nextMonthPlan: z.string().optional() }).parse(req.body);
+  const [client, campaignCount, serviceCount] = await Promise.all([
+    prisma.client.findUnique({ where: { id: body.clientId } }),
+    prisma.campaignLog.count({ where: { clientId: body.clientId, month: body.month, year: body.year } }),
+    prisma.serviceOrder.count({ where: { clientId: body.clientId, status: "ACTIVE" } })
+  ]);
+  const summary = `This month we managed ${serviceCount} services for ${client?.businessName || "client"} with ${campaignCount} campaign records. ${body.nextMonthPlan || "Continue optimization and report weekly progress."}`;
+  const report = await prisma.report.create({
+    data: { clientId: body.clientId, month: body.month, year: body.year, summary, pdfUrl: `/api/reports/${Date.now()}.pdf` }
+  });
+  res.status(201).json({ data: { ...report, campaignCount } });
+}));
 
-router.get("/", (req, res) => {
-  const data = reports.filter((item) => !req.query.clientId || item.clientId === req.query.clientId);
+router.get("/", asyncRoute(async (req, res) => {
+  const data = await prisma.report.findMany({
+    where: req.query.clientId ? { clientId: String(req.query.clientId) } : {},
+    orderBy: { createdAt: "desc" }
+  });
   res.json({ data });
-});
+}));
 
 module.exports = router;

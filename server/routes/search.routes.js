@@ -1,18 +1,18 @@
 const express = require("express");
-const { clients, leads, invoices } = require("../data");
-const verifyToken = require("../middleware/verifyToken");
+const prisma = require("../db/prisma");
+const asyncRoute = require("../utils/asyncRoute");
 
 const router = express.Router();
-router.use(verifyToken);
 
-router.get("/", (req, res) => {
-  const q = String(req.query.q || "").toLowerCase();
+router.get("/", asyncRoute(async (req, res) => {
+  const q = String(req.query.q || "");
   const can = (permission) => req.user.role === "OWNER" || (req.user.permissions || []).includes(permission);
-  res.json({ data: {
-    clients: can("clients") ? clients.filter((item) => item.businessName.toLowerCase().includes(q)).slice(0, 5) : [],
-    leads: can("leads") ? leads.filter((item) => `${item.name} ${item.phone}`.toLowerCase().includes(q)).slice(0, 5) : [],
-    invoices: can("invoices") ? invoices.filter((item) => item.invoiceNumber.toLowerCase().includes(q)).slice(0, 5) : []
-  } });
-});
+  const [clients, leads, invoices] = await Promise.all([
+    can("clients") ? prisma.client.findMany({ where: { businessName: { contains: q, mode: "insensitive" } }, take: 5 }) : [],
+    can("leads") ? prisma.lead.findMany({ where: { OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q, mode: "insensitive" } }] }, take: 5 }) : [],
+    can("invoices") ? prisma.invoice.findMany({ where: { invoiceNumber: { contains: q, mode: "insensitive" } }, take: 5 }) : []
+  ]);
+  res.json({ data: { clients, leads, invoices } });
+}));
 
 module.exports = router;

@@ -13,7 +13,7 @@ model User {
   name          String
   email         String         @unique
   password      String
-  role          Role           @default(TEAM)
+  role          Role           @default(ACCOUNT_MANAGER)
   avatar        String?
   phone         String?
   permissions   String[]       @default([])
@@ -36,7 +36,6 @@ enum Role {
   DESIGNER
   SEO_EXEC
   CLIENT
-  TEAM
 }
 
 model Lead {

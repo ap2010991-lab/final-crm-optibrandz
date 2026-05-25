@@ -1,32 +1,34 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
 const { z } = require("zod");
-const { users, tasks, allPermissions } = require("../data");
-const verifyToken = require("../middleware/verifyToken");
+const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
+const asyncRoute = require("../utils/asyncRoute");
+const { allPermissions, roles } = require("../utils/constants");
 
 const router = express.Router();
-router.use(verifyToken, requireRole(["OWNER"]));
+router.use(requireRole(["OWNER"]));
 
-const roles = ["OWNER", "ACCOUNT_MANAGER", "SEO_EXEC", "DESIGNER", "CLIENT"];
 const publicUser = (user) => ({ ...user, password: undefined });
 const initials = (name) => name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 const validPermissions = z.array(z.enum([...allPermissions, "portal"])).default(["dashboard"]);
 
-router.get("/", (_req, res) => {
+router.get("/", asyncRoute(async (_req, res) => {
+  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { tasks: true } });
+  const now = new Date();
   const data = users.map((user) => {
-    const mine = tasks.filter((task) => task.assignedToId === user.id);
+    const mine = user.tasks || [];
     return {
       ...publicUser(user),
       totalTasks: mine.length,
       doneTasks: mine.filter((task) => task.status === "DONE").length,
-      overdueTasks: mine.filter((task) => new Date(task.dueDate) < new Date() && task.status !== "DONE").length
+      overdueTasks: mine.filter((task) => new Date(task.dueDate) < now && task.status !== "DONE").length
     };
   });
   res.json({ data, permissions: allPermissions, roles });
-});
+}));
 
-router.post("/", async (req, res) => {
+router.post("/", asyncRoute(async (req, res) => {
   const body = z.object({
     name: z.string().min(2),
     email: z.string().email(),
@@ -35,21 +37,17 @@ router.post("/", async (req, res) => {
     phone: z.string().optional(),
     permissions: validPermissions
   }).parse(req.body);
-  if (users.some((user) => user.email.toLowerCase() === body.email.toLowerCase())) return res.status(409).json({ message: "Email already exists" });
-  const user = {
-    id: `u-${Date.now()}`,
-    ...body,
-    password: await bcrypt.hash(body.password, 12),
-    avatar: initials(body.name),
-    isActive: true
-  };
-  users.push(user);
+  const exists = await prisma.user.findFirst({ where: { email: { equals: body.email, mode: "insensitive" } } });
+  if (exists) return res.status(409).json({ message: "Email already exists" });
+  const user = await prisma.user.create({
+    data: { ...body, password: await bcrypt.hash(body.password, 12), avatar: initials(body.name), isActive: true }
+  });
   res.status(201).json({ data: publicUser(user) });
-});
+}));
 
-router.put("/:id", async (req, res) => {
-  const user = users.find((item) => item.id === req.params.id);
-  if (!user) return res.status(404).json({ message: "Team member not found" });
+router.put("/:id", asyncRoute(async (req, res) => {
+  const current = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ message: "Team member not found" });
   const body = z.object({
     name: z.string().min(2).optional(),
     email: z.string().email().optional(),
@@ -59,20 +57,24 @@ router.put("/:id", async (req, res) => {
     permissions: validPermissions.optional(),
     isActive: z.boolean().optional()
   }).parse(req.body);
-  if (body.email && users.some((item) => item.id !== user.id && item.email.toLowerCase() === body.email.toLowerCase())) return res.status(409).json({ message: "Email already exists" });
+  if (body.email) {
+    const exists = await prisma.user.findFirst({ where: { email: { equals: body.email, mode: "insensitive" }, NOT: { id: current.id } } });
+    if (exists) return res.status(409).json({ message: "Email already exists" });
+  }
   const { password, ...rest } = body;
-  Object.assign(user, rest);
-  if (password) user.password = await bcrypt.hash(password, 12);
-  if (body.name) user.avatar = initials(body.name);
+  const user = await prisma.user.update({
+    where: { id: current.id },
+    data: { ...rest, ...(password ? { password: await bcrypt.hash(password, 12) } : {}), ...(body.name ? { avatar: initials(body.name) } : {}) }
+  });
   res.json({ data: publicUser(user) });
-});
+}));
 
-router.delete("/:id", (req, res) => {
-  const user = users.find((item) => item.id === req.params.id);
+router.delete("/:id", asyncRoute(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return res.status(404).json({ message: "Team member not found" });
   if (user.role === "OWNER") return res.status(400).json({ message: "Owner login cannot be removed" });
-  user.isActive = false;
-  res.json({ data: publicUser(user) });
-});
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
+  res.json({ data: publicUser(updated) });
+}));
 
 module.exports = router;

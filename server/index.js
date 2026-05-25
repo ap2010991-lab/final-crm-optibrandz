@@ -1,4 +1,8 @@
 require("dotenv").config();
+if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is required in production.");
+  process.exit(1);
+}
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -34,14 +38,19 @@ app.use("/api/tasks", verifyToken, requirePermission("services"), require("./rou
 app.use("/api/calendar", verifyToken, requirePermission("content"), require("./routes/calendar.routes"));
 app.use("/api/invoices", verifyToken, requirePermission("invoices"), require("./routes/invoices.routes"));
 app.use("/api/campaigns", verifyToken, requirePermission("campaigns"), require("./routes/campaigns.routes"));
-app.use("/api/reports", require("./routes/reports.routes"));
-app.use("/api/notifications", require("./routes/notifications.routes"));
-app.use("/api/search", require("./routes/search.routes"));
-app.use("/api/ai", require("./routes/ai.routes"));
-app.use("/api/team", require("./routes/team.routes"));
+app.use("/api/reports", verifyToken, requirePermission("reports"), require("./routes/reports.routes"));
+app.use("/api/notifications", verifyToken, require("./routes/notifications.routes"));
+app.use("/api/search", verifyToken, require("./routes/search.routes"));
+app.use("/api/ai", verifyToken, requirePermission("ai"), require("./routes/ai.routes"));
+app.use("/api/team", verifyToken, requirePermission("team"), require("./routes/team.routes"));
+
+const { registerDailyAlerts } = require("./jobs/daily-alerts.job");
+const { registerRenewalAlerts } = require("./jobs/renewal-alerts.job");
+registerDailyAlerts();
+registerRenewalAlerts();
 
 app.use((err, _req, res, _next) => {
-  const status = err.name === "ZodError" ? 422 : 500;
+  const status = err.status || (err.name === "ZodError" ? 422 : 500);
   res.status(status).json({ message: err.message || "Server error", issues: err.issues });
 });
 

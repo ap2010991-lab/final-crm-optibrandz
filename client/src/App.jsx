@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { DndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Bell, Bot, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Edit3, FileText, Gauge, GripVertical, ImageUp, LayoutDashboard, LogOut, Megaphone, MessageCircle, Plus, Save, Search, Send, Settings, Sparkles, Trash2, UploadCloud, Users, Wand2, X } from "lucide-react";
-import optibrandzLogo from "./assets/optibrandz-logo.png";
 
 const API_URL = import.meta.env.VITE_API_URL || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:3001/api" : "/api");
 const queryClient = new QueryClient();
@@ -50,6 +49,7 @@ const nav = [
   ["Content", "/content", CalendarDays, "content"],
   ["Invoices", "/invoices", CircleDollarSign, "invoices"],
   ["Campaigns", "/campaigns", Sparkles, "campaigns"],
+  ["Reports", "/reports", FileText, "reports"],
   ["Team", "/team/workload", Users, "team"],
   ["Settings", "/settings", Settings, "settings"]
 ];
@@ -64,7 +64,12 @@ const normalizePhone = (value) => {
   const digits = String(value || "").replace(/\D/g, "").replace(/^0+/, "");
   return digits.length === 10 ? `91${digits}` : digits;
 };
-function BrandLogo({ className = "size-11" }) { return <img src={optibrandzLogo} alt="Optibrandz logo" className={`${className} rounded-full bg-black object-contain p-1.5`} />; }
+function BrandLogo({ className = "size-11" }) {
+  return <svg viewBox="0 0 64 64" role="img" aria-label="Optibrandz logo" className={`${className} rounded-full bg-[#090909] p-2`}>
+    <circle cx="32" cy="32" r="30" fill="#090909" />
+    <text x="32" y="40" textAnchor="middle" fontFamily="Inter, Arial, sans-serif" fontSize="20" fontWeight="900" fill="#ffd84d">OB</text>
+  </svg>;
+}
 function Badge({ children, tone }) { return <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium ${tones[tone] || "border-slate-200 bg-slate-100 text-slate-700"}`}>{children}</span>; }
 
 function Shell({ children }) {
@@ -106,7 +111,7 @@ function SearchBox() {
   const groups = [
     ["Clients", data?.data?.clients || [], (item) => `/clients/${item.id}`, (item) => item.businessName],
     ["Leads", data?.data?.leads || [], (item) => `/leads/${item.id}`, (item) => `${item.name} · ${item.phone}`],
-    ["Invoices", data?.data?.invoices || [], (item) => "/invoices", (item) => `${item.invoiceNumber} · ${money(item.totalAmount)}`]
+    ["Invoices", data?.data?.invoices || [], () => "/invoices", (item) => `${item.invoiceNumber} · ${money(item.totalAmount)}`]
   ];
   const hasResults = groups.some(([, rows]) => rows.length);
   function go(path) {
@@ -189,10 +194,15 @@ function AlertPanel({ title, count = 0, items = [] }) { return <div className="p
 
 function NotificationPanel({ items = [], onClose }) {
   const todayItems = items.filter((item) => ["TASK", "LEAD", "INVOICE", "CONTENT", "RENEWAL"].includes(item.type));
+  async function markAllRead() {
+    await api("/notifications/read-all", { method: "PUT" });
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    onClose();
+  }
   return <div className="notification-panel">
     <div className="flex items-center justify-between gap-3 border-b border-black/10 p-4">
       <div><h2 className="text-sm font-black">Today’s Action Center</h2><p className="text-xs font-semibold text-zinc-500">{todayItems.length} things need attention</p></div>
-      <button className="table-action" onClick={onClose}>Close</button>
+      <div className="flex flex-wrap gap-2"><button className="table-action" onClick={markAllRead}>Mark all read</button><button className="table-action" onClick={onClose}>Close</button></div>
     </div>
     <div className="max-h-[460px] overflow-auto p-2">
       {items.length === 0 && <div className="p-4 text-sm font-semibold text-zinc-500">No actions for today. Nice and quiet.</div>}
@@ -336,7 +346,7 @@ function Leads() {
   async function onDragEnd(event) { if (event.over?.id && event.active?.id) { await api(`/leads/${event.active.id}`, { method: "PUT", body: JSON.stringify({ status: event.over.id }) }); refetch(); } }
   const leadFields = [
     { name: "name", label: "Contact Name" }, { name: "phone", label: "Phone" }, { name: "email", label: "Email" }, { name: "businessName", label: "Business Name" },
-    { name: "city", label: "City" }, { name: "source", label: "Source", options: ["WHATSAPP", "INSTAGRAM", "GOOGLE_ADS", "WEBSITE", "REFERRAL", "WALK_IN"] },
+    { name: "city", label: "City" }, { name: "source", label: "Source", options: ["WHATSAPP", "INSTAGRAM", "GOOGLE_ADS", "META_ADS", "WEBSITE", "REFERRAL", "WALK_IN", "COLD_CALL"] },
     { name: "status", label: "Status", options: leadColumns }, { name: "serviceInterest", label: "Services, comma separated", kind: "list" },
     { name: "budget", label: "Budget" }, { name: "followUpDate", label: "Follow-up Date", type: "date" }, { name: "notes", label: "Notes", rows: 3 }
   ];
@@ -414,21 +424,32 @@ function Services() {
   const { data: services } = useQuery({ queryKey: ["services"], queryFn: () => api("/services") });
   const { data: tasks } = useQuery({ queryKey: ["tasks"], queryFn: () => api("/tasks") });
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  const { data: team } = useQuery({ queryKey: ["team"], queryFn: () => api("/team") });
   const cols = ["PENDING", "IN_PROGRESS", "REVIEW", "DONE"];
   const clientOptions = (clients?.data || []).map((c) => ({ value: c.id, label: c.businessName }));
+  const teamOptions = (team?.data || []).filter((m) => m.isActive && m.role !== "CLIENT").map((m) => ({ value: m.id, label: m.name }));
   async function saveService(payload) { await api(serviceEdit?.id ? `/services/${serviceEdit.id}` : "/services", { method: serviceEdit?.id ? "PUT" : "POST", body: JSON.stringify(payload) }); refreshCRM(); }
   async function saveTask(payload) { await api(taskEdit?.id ? `/tasks/${taskEdit.id}` : "/tasks", { method: taskEdit?.id ? "PUT" : "POST", body: JSON.stringify(payload) }); refreshCRM(); }
-  return <div className="service-workspace"><div className="panel min-w-0"><div className="toolbar"><h2 className="section-title">Service Orders</h2><button className="primary" onClick={() => setServiceEdit({ clientId: clientOptions[0]?.value, serviceType: "SEO", monthlyValue: 0 })}><Plus size={16} /> Add Service</button></div><DataTable rows={services?.data || []} columns={["serviceType", "packageName", "monthlyValue", "status"]} action={(row) => <button className="table-action" onClick={() => setServiceEdit(row)}><Edit3 size={14} /> Edit</button>} /></div><div className="panel min-w-0"><div className="toolbar"><h2 className="section-title">Task Board</h2><button className="primary" onClick={() => setTaskEdit({ serviceOrderId: services?.data?.[0]?.id, assignedToId: "u-owner", priority: "MEDIUM" })}><Plus size={16} /> Add Task</button></div><div className="task-board-grid">{cols.map((col) => <div key={col} className="task-column"><h3>{pretty(col)}</h3>{(tasks?.data || []).filter((task) => task.status === col).map((task) => <div key={task.id} className="task-card"><div className="font-medium">{task.title}</div><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><Badge tone={task.priority}>{pretty(task.priority)}</Badge><span className="text-xs text-slate-500">{date(task.dueDate)}</span></div><button className="table-action mt-2" onClick={() => setTaskEdit({ ...task, dueDate: task.dueDate?.slice?.(0, 10) })}><Edit3 size={14} /> Edit</button></div>)}</div>)}</div></div>{serviceEdit && <EditRecordModal title={serviceEdit.id ? "Edit Service" : "Add Service"} initial={serviceEdit} fields={[{ name: "clientId", label: "Client", options: clientOptions }, { name: "serviceType", label: "Service", options: ["SEO", "SMO", "SMM", "GOOGLE_ADS", "META_ADS", "WEBSITE", "GMB", "CONTENT", "GRAPHIC_DESIGN"] }, { name: "packageName", label: "Package" }, { name: "monthlyValue", label: "Monthly Value", kind: "number", type: "number" }, { name: "status", label: "Status", options: ["ACTIVE", "PAUSED", "COMPLETED"] }]} onSubmit={saveService} onClose={() => setServiceEdit(null)} />}{taskEdit && <EditRecordModal title={taskEdit.id ? "Edit Task" : "Add Task"} initial={taskEdit} fields={[{ name: "title", label: "Task Title" }, { name: "serviceOrderId", label: "Service Order ID" }, { name: "assignedToId", label: "Assigned To", options: ["u-owner", "u-am", "u-seo", "u-design"] }, { name: "priority", label: "Priority", options: ["LOW", "MEDIUM", "HIGH", "URGENT"] }, { name: "status", label: "Status", options: cols }, { name: "dueDate", label: "Due Date", type: "date" }]} onSubmit={saveTask} onClose={() => setTaskEdit(null)} />}</div>;
+  return <div className="service-workspace"><div className="panel min-w-0"><div className="toolbar"><h2 className="section-title">Service Orders</h2><button className="primary" onClick={() => setServiceEdit({ clientId: clientOptions[0]?.value, serviceType: "SEO", monthlyValue: 0 })}><Plus size={16} /> Add Service</button></div><DataTable rows={services?.data || []} columns={["serviceType", "packageName", "monthlyValue", "status"]} action={(row) => <button className="table-action" onClick={() => setServiceEdit(row)}><Edit3 size={14} /> Edit</button>} /></div><div className="panel min-w-0"><div className="toolbar"><h2 className="section-title">Task Board</h2><button className="primary" onClick={() => setTaskEdit({ serviceOrderId: services?.data?.[0]?.id, assignedToId: teamOptions[0]?.value || "", priority: "MEDIUM" })}><Plus size={16} /> Add Task</button></div><div className="task-board-grid">{cols.map((col) => <div key={col} className="task-column"><h3>{pretty(col)}</h3>{(tasks?.data || []).filter((task) => task.status === col).map((task) => <div key={task.id} className="task-card"><div className="font-medium">{task.title}</div><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><Badge tone={task.priority}>{pretty(task.priority)}</Badge><span className="text-xs text-slate-500">{date(task.dueDate)}</span></div><button className="table-action mt-2" onClick={() => setTaskEdit({ ...task, dueDate: task.dueDate?.slice?.(0, 10) })}><Edit3 size={14} /> Edit</button></div>)}</div>)}</div></div>{serviceEdit && <EditRecordModal title={serviceEdit.id ? "Edit Service" : "Add Service"} initial={serviceEdit} fields={[{ name: "clientId", label: "Client", options: clientOptions }, { name: "serviceType", label: "Service", options: ["SEO", "SMO", "SMM", "GOOGLE_ADS", "META_ADS", "WEBSITE", "GMB", "CONTENT", "GRAPHIC_DESIGN"] }, { name: "packageName", label: "Package" }, { name: "monthlyValue", label: "Monthly Value", kind: "number", type: "number" }, { name: "status", label: "Status", options: ["ACTIVE", "PAUSED", "COMPLETED"] }]} onSubmit={saveService} onClose={() => setServiceEdit(null)} />}{taskEdit && <EditRecordModal title={taskEdit.id ? "Edit Task" : "Add Task"} initial={taskEdit} fields={[{ name: "title", label: "Task Title" }, { name: "serviceOrderId", label: "Service Order ID" }, { name: "assignedToId", label: "Assigned To", options: teamOptions }, { name: "priority", label: "Priority", options: ["LOW", "MEDIUM", "HIGH", "URGENT"] }, { name: "status", label: "Status", options: cols }, { name: "dueDate", label: "Due Date", type: "date" }]} onSubmit={saveTask} onClose={() => setTaskEdit(null)} />}</div>;
 }
 function ContentCalendar() {
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
   const [clientId, setClientId] = useState("c-1");
   const [editing, setEditing] = useState(null);
-  const { data } = useQuery({ queryKey: ["calendar", clientId], queryFn: () => api(`/calendar?clientId=${clientId}&month=5&year=2026`) });
+  const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1);
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const monthLabel = new Date(calYear, calMonth - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const { data } = useQuery({ queryKey: ["calendar", clientId, calMonth, calYear], queryFn: () => api(`/calendar?clientId=${clientId}&month=${calMonth}&year=${calYear}`) });
   const items = data?.data || [];
-  async function saveItem(payload) { await api(editing?.id ? `/calendar/${editing.id}` : "/calendar", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify({ ...payload, month: 5, year: 2026, scheduledDate: payload.scheduledDate ? new Date(payload.scheduledDate).toISOString() : new Date().toISOString() }) }); refreshCRM(); }
-  async function bulkGenerate() { await api("/calendar/bulk", { method: "POST", body: JSON.stringify({ clientId, month: 5, year: 2026, count: 26, platform: "INSTAGRAM" }) }); refreshCRM(); }
-  return <div className="space-y-4"><div className="toolbar"><select className="input max-w-xs" value={clientId} onChange={(e) => setClientId(e.target.value)}>{(clients?.data || []).map((client) => <option key={client.id} value={client.id}>{client.businessName}</option>)}</select><div className="flex gap-2"><button className="secondary-button" onClick={bulkGenerate}>Generate Month</button><button className="primary" onClick={() => setEditing({ clientId, platform: "INSTAGRAM", postType: "STATIC", status: "DRAFT" })}><Plus size={16} /> Add Post</button></div></div><div className="grid grid-cols-7 gap-2">{Array.from({ length: 31 }, (_, i) => i + 1).map((day) => <div key={day} className="min-h-28 rounded-lg border border-slate-200 bg-white p-2"><div className="text-xs font-semibold text-slate-500">{day}</div><div className="mt-2 space-y-1">{items.filter((item) => new Date(item.scheduledDate).getDate() === day).map((item) => <button key={item.id} onClick={() => setEditing({ ...item, scheduledDate: item.scheduledDate?.slice?.(0, 10) })} className="w-full rounded-md bg-emerald-50 px-2 py-1 text-left text-[11px] font-medium text-emerald-700">{pretty(item.platform)} · {pretty(item.status)}</button>)}</div></div>)}</div>{editing && <EditRecordModal title={editing.id ? "Edit Content" : "Add Content"} initial={editing} fields={[{ name: "clientId", label: "Client ID" }, { name: "platform", label: "Platform", options: ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "YOUTUBE", "GMB"] }, { name: "postType", label: "Post Type", options: ["STATIC", "REEL", "CAROUSEL", "STORY", "BLOG"] }, { name: "scheduledDate", label: "Schedule Date", type: "date" }, { name: "status", label: "Status", options: ["DRAFT", "REVIEW", "APPROVED", "PUBLISHED"] }, { name: "caption", label: "Caption", rows: 3 }, { name: "designBrief", label: "Design Brief", rows: 3 }]} onSubmit={saveItem} onClose={() => setEditing(null)} />}</div>;
+  function changeMonth(delta) {
+    const next = new Date(calYear, calMonth - 1 + delta, 1);
+    setCalMonth(next.getMonth() + 1);
+    setCalYear(next.getFullYear());
+  }
+  async function saveItem(payload) { await api(editing?.id ? `/calendar/${editing.id}` : "/calendar", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify({ ...payload, month: calMonth, year: calYear, scheduledDate: payload.scheduledDate ? new Date(payload.scheduledDate).toISOString() : new Date(calYear, calMonth - 1, 1).toISOString() }) }); refreshCRM(); }
+  async function bulkGenerate() { await api("/calendar/bulk", { method: "POST", body: JSON.stringify({ clientId, month: calMonth, year: calYear, count: 26, platform: "INSTAGRAM" }) }); refreshCRM(); }
+  return <div className="space-y-4"><div className="toolbar"><select className="input max-w-xs" value={clientId} onChange={(e) => setClientId(e.target.value)}>{(clients?.data || []).map((client) => <option key={client.id} value={client.id}>{client.businessName}</option>)}</select><div className="flex flex-wrap items-center gap-2"><button className="icon-button" onClick={() => changeMonth(-1)} title="Previous month"><ChevronRight className="rotate-180" size={16} /></button><span className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black">{monthLabel}</span><button className="icon-button" onClick={() => changeMonth(1)} title="Next month"><ChevronRight size={16} /></button><button className="secondary-button" onClick={bulkGenerate}>Generate Month</button><button className="primary" onClick={() => setEditing({ clientId, platform: "INSTAGRAM", postType: "STATIC", status: "DRAFT" })}><Plus size={16} /> Add Post</button></div></div><div className="panel"><h2 className="section-title">{monthLabel}</h2><div className="mt-4 grid grid-cols-7 gap-2">{Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => <div key={day} className="min-h-28 rounded-lg border border-slate-200 bg-white p-2"><div className="text-xs font-semibold text-slate-500">{day}</div><div className="mt-2 space-y-1">{items.filter((item) => new Date(item.scheduledDate).getDate() === day).map((item) => <button key={item.id} onClick={() => setEditing({ ...item, scheduledDate: item.scheduledDate?.slice?.(0, 10) })} className="w-full rounded-md bg-emerald-50 px-2 py-1 text-left text-[11px] font-medium text-emerald-700">{pretty(item.platform)} · {pretty(item.status)}</button>)}</div></div>)}</div></div>{editing && <EditRecordModal title={editing.id ? "Edit Content" : "Add Content"} initial={editing} fields={[{ name: "clientId", label: "Client ID" }, { name: "platform", label: "Platform", options: ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "YOUTUBE", "GMB"] }, { name: "postType", label: "Post Type", options: ["STATIC", "REEL", "CAROUSEL", "STORY", "BLOG"] }, { name: "scheduledDate", label: "Schedule Date", type: "date" }, { name: "status", label: "Status", options: ["DRAFT", "REVIEW", "APPROVED", "PUBLISHED"] }, { name: "caption", label: "Caption", rows: 3 }, { name: "designBrief", label: "Design Brief", rows: 3 }]} onSubmit={saveItem} onClose={() => setEditing(null)} />}</div>;
 }
 function Invoices() {
   const [editing, setEditing] = useState(null);
@@ -445,7 +466,7 @@ function Invoices() {
   function whatsappInvoiceUrl(row) {
     const phone = normalizePhone(row.clientPhone || row.client?.phone);
     if (!phone) return "";
-    const pdfUrl = `${API_URL.replace(/\/api$/, "")}/api/invoices/${row.id}/pdf`;
+    const pdfUrl = `${window.location.origin}/api/invoices/${row.id}/pdf`;
     const text = `Hello ${row.client?.contactPerson || row.client?.businessName || "Client"}, invoice ${row.invoiceNumber} from OptiBrandz is ready. Amount: ${money(row.totalAmount)}. Due date: ${date(row.dueDate)}. PDF: ${pdfUrl}\n\nSent from OptiBrandz CRM (${AGENCY_WHATSAPP}).`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   }
@@ -457,6 +478,20 @@ function Campaigns() {
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
   async function saveCampaign(payload) { await api(editing?.id ? `/campaigns/${editing.id}` : "/campaigns", { method: editing?.id ? "PUT" : "POST", body: JSON.stringify({ ...payload, month: 5, year: 2026 }) }); refreshCRM(); }
   return <div className="grid gap-5 xl:grid-cols-[1fr_.8fr]"><div className="panel"><div className="toolbar"><h2 className="section-title">Campaign Performance</h2><button className="primary" onClick={() => setEditing({ clientId: clients?.data?.[0]?.id, platform: "INSTAGRAM", adSpend: 0, impressions: 0, clicks: 0, ctr: 0, leadsGenerated: 0, cpl: 0 })}><Plus size={16} /> Add Campaign</button></div><DataTable rows={data?.data || []} columns={["platform", "adSpend", "impressions", "clicks", "ctr", "leadsGenerated", "cpl"]} action={(row) => <button className="table-action" onClick={() => setEditing(row)}><Edit3 size={14} /> Edit</button>} /></div><div className="panel"><h2 className="section-title">SEO Keyword Tracker</h2><DataTable rows={data?.data?.[0]?.seoKeywords || []} columns={["keyword", "prev", "current"]} /></div>{editing && <EditRecordModal title={editing.id ? "Edit Campaign" : "Add Campaign"} initial={editing} fields={[{ name: "clientId", label: "Client", options: (clients?.data || []).map((c) => ({ value: c.id, label: c.businessName })) }, { name: "platform", label: "Platform", options: ["GOOGLE_ADS", "INSTAGRAM", "FACEBOOK", "LINKEDIN", "SEO"] }, { name: "adSpend", label: "Ad Spend", kind: "number", type: "number" }, { name: "impressions", label: "Impressions", kind: "number", type: "number" }, { name: "clicks", label: "Clicks", kind: "number", type: "number" }, { name: "ctr", label: "CTR", kind: "number", type: "number" }, { name: "leadsGenerated", label: "Leads Generated", kind: "number", type: "number" }, { name: "cpl", label: "CPL", kind: "number", type: "number" }]} onSubmit={saveCampaign} onClose={() => setEditing(null)} />}</div>;
+}
+function Reports() {
+  const now = new Date();
+  const [clientId, setClientId] = useState("");
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  const selectedClientId = clientId || clients?.data?.[0]?.id || "";
+  const { data, refetch } = useQuery({ queryKey: ["reports", clientId], queryFn: () => api(`/reports${clientId ? `?clientId=${clientId}` : ""}`) });
+  async function generateReport() {
+    if (!selectedClientId) return;
+    await api("/reports/generate", { method: "POST", body: JSON.stringify({ clientId: selectedClientId, month: now.getMonth() + 1, year: now.getFullYear() }) });
+    refreshCRM();
+    refetch();
+  }
+  return <div className="panel"><div className="toolbar"><div className="flex flex-wrap items-center gap-3"><h2 className="section-title">Reports</h2><select className="input max-w-xs" value={selectedClientId} onChange={(e) => setClientId(e.target.value)}>{(clients?.data || []).map((client) => <option key={client.id} value={client.id}>{client.businessName}</option>)}</select></div><button className="primary" onClick={generateReport} disabled={!selectedClientId}><FileText size={16} /> Generate Report</button></div><DataTable rows={data?.data || []} columns={["clientId", "month", "year", "summary", "sentAt", "createdAt"]} /></div>;
 }
 function TeamWorkload() {
   const [editing, setEditing] = useState(null);
@@ -581,7 +616,7 @@ function DetailLayout({ title, aside, children }) { return <div className="grid 
 function Info({ label, value }) { return <div><div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div><div className="mt-1 text-sm font-semibold text-slate-800">{value || "-"}</div></div>; }
 function Timeline({ items }) { return <div className="mt-4 space-y-3">{(items || []).map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3"><div className="flex items-center justify-between"><Badge tone={item.type}>{pretty(item.type)}</Badge><span className="text-xs text-slate-500">{date(item.createdAt)}</span></div><p className="mt-2 text-sm text-slate-600">{item.note}</p></div>)}</div>; }
 function valueAt(row, key) { return key.split(".").reduce((acc, part) => acc?.[part], row); }
-function DataTable({ rows = [], columns = [], action }) { return <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b border-slate-200 text-xs uppercase text-slate-400">{columns.map((col) => <th className="px-3 py-3 font-semibold" key={col}>{pretty(col.split(".").at(-1))}</th>)}{action && <th className="px-3 py-3">Actions</th>}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || index} className="border-b border-slate-100">{columns.map((col) => { const value = valueAt(row, col); return <td className="px-3 py-3" key={col}>{col.toLowerCase().includes("amount") || col.toLowerCase().includes("value") || col === "adSpend" ? money(value) : col.toLowerCase().includes("date") ? date(value) : ["status", "priority"].includes(col) ? <Badge tone={value}>{pretty(value)}</Badge> : pretty(value)}</td>; })}{action && <td className="px-3 py-3">{action(row)}</td>}</tr>)}</tbody></table></div>; }
+function DataTable({ rows = [], columns = [], action }) { return <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b border-slate-200 text-xs uppercase text-slate-400">{columns.map((col) => <th className="px-3 py-3 font-semibold" key={col}>{pretty(col.split(".").at(-1))}</th>)}{action && <th className="px-3 py-3">Actions</th>}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || index} className="border-b border-slate-100">{columns.map((col) => { const value = valueAt(row, col); return <td className="px-3 py-3" key={col}>{col.toLowerCase().includes("amount") || col.toLowerCase().includes("value") || col === "adSpend" || col === "monthlyValue" ? money(value) : col.toLowerCase().includes("date") ? date(value) : ["status", "priority"].includes(col) ? <Badge tone={value}>{pretty(value)}</Badge> : pretty(value)}</td>; })}{action && <td className="px-3 py-3">{action(row)}</td>}</tr>)}</tbody></table></div>; }
 function NotFound() { return <div className="panel"><h2 className="text-xl font-bold">Page not found</h2><p className="mt-2 text-sm text-slate-600">The CRM route you opened does not exist.</p></div>; }
 
 function App() {
@@ -600,6 +635,7 @@ function App() {
     <Route path="/content" element={<RequireAuth permission="content"><ContentCalendar /></RequireAuth>} />
     <Route path="/invoices" element={<RequireAuth permission="invoices"><Invoices /></RequireAuth>} />
     <Route path="/campaigns" element={<RequireAuth permission="campaigns"><Campaigns /></RequireAuth>} />
+    <Route path="/reports" element={<RequireAuth permission="reports"><Reports /></RequireAuth>} />
     <Route path="/team/workload" element={<RequireAuth roles={["OWNER"]} permission="team"><TeamWorkload /></RequireAuth>} />
     <Route path="/settings" element={<RequireAuth permission="settings"><SettingsPage /></RequireAuth>} />
     <Route path="/portal/dashboard" element={<RequireAuth roles={["CLIENT"]}><Portal /></RequireAuth>} />
