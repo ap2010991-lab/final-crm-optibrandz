@@ -30,6 +30,7 @@ app.use(cookieParser());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, name: "OptiBrandz CRM API" }));
 app.use("/api/auth", require("./routes/auth.routes"));
+app.use("/api/public/invoices", require("./routes/public-invoices.routes"));
 app.use("/api/dashboard", verifyToken, requirePermission("dashboard"), require("./routes/dashboard.routes"));
 app.use("/api/leads", verifyToken, requirePermission("leads"), require("./routes/leads.routes"));
 app.use("/api/clients", verifyToken, requirePermission("clients"), require("./routes/clients.routes"));
