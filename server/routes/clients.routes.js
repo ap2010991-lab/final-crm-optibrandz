@@ -23,6 +23,23 @@ const clientSchema = z.object({
   services: z.array(z.string()).default([])
 });
 
+const clientUpdateSchema = z.object({
+  businessName: z.string().optional(),
+  contactPerson: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  industry: z.string().nullable().optional(),
+  websiteUrl: z.string().nullable().optional(),
+  status: z.string().optional(),
+  healthScore: z.number().optional(),
+  totalValue: z.number().min(0).optional(),
+  advancePaid: z.number().min(0).optional(),
+  mrr: z.number().min(0).optional(),
+  renewalDate: z.string().optional().nullable(),
+  services: z.array(z.string()).optional()
+});
+
 function clientWhere(user) {
   return user.role === "CLIENT" ? { id: user.clientId } : {};
 }
@@ -105,7 +122,7 @@ router.get("/:id", asyncRoute(async (req, res) => {
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
-  const body = clientSchema.partial().parse(req.body);
+  const body = clientUpdateSchema.parse(req.body);
   const { services, mrr, renewalDate, ...rest } = body;
   requireMrrService(mrr, services);
   const client = await prisma.$transaction(async (db) => {
