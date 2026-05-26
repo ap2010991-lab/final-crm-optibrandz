@@ -12,7 +12,7 @@ async function crmSnapshot() {
     prisma.contentCalendar.count()
   ]);
   return {
-    clients: clients.map(({ id, businessName, city, industry, healthScore, status, services, renewalDate }) => ({ id, businessName, city, industry, healthScore, status, services: services.map((item) => item.serviceType), renewalDate })),
+    clients: clients.map(({ id, businessName, city, industry, healthScore, status, totalValue, advancePaid, services, renewalDate }) => ({ id, businessName, city, industry, healthScore, status, totalValue, advancePaid, balanceDue: Math.max(Number(totalValue || 0) - Number(advancePaid || 0), 0), services: services.map((item) => item.serviceType), renewalDate })),
     leads: leads.map(({ id, name, businessName, city, source, status, serviceInterest, score, followUpDate, notes }) => ({ id, name, businessName, city, source, status, serviceInterest, score, followUpDate, notes })),
     invoices: invoices.map(({ invoiceNumber, clientId, totalAmount, paidAmount, status, dueDate }) => ({ invoiceNumber, clientId, totalAmount, paidAmount, status, dueDate })),
     openTasks: tasks.map(({ title, status, priority, dueDate }) => ({ title, status, priority, dueDate })),

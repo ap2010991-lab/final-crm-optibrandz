@@ -16,7 +16,8 @@ const clientSchema = z.object({
   websiteUrl: z.string().nullable().optional(),
   status: z.string().default("ACTIVE"),
   healthScore: z.number().default(100),
-  totalValue: z.number().default(0),
+  totalValue: z.number().min(0).default(0),
+  advancePaid: z.number().min(0).default(0),
   mrr: z.number().min(0).optional(),
   renewalDate: z.string().optional().nullable(),
   services: z.array(z.string()).default([])
@@ -32,7 +33,8 @@ function toClientResponse(client) {
     ...client,
     services: activeOrders.map((order) => order.serviceType),
     serviceCount: activeOrders.length,
-    mrr: activeOrders.reduce((sum, item) => sum + Number(item.monthlyValue || 0), 0)
+    mrr: activeOrders.reduce((sum, item) => sum + Number(item.monthlyValue || 0), 0),
+    balanceDue: Math.max(Number(client.totalValue || 0) - Number(client.advancePaid || 0), 0)
   };
 }
 
@@ -43,6 +45,14 @@ function mrrFor(client) {
 function requireMrrService(mrr, services) {
   if (mrr > 0 && Array.isArray(services) && services.length === 0) {
     const error = new Error("Choose at least one service before entering a monthly retainer.");
+    error.status = 422;
+    throw error;
+  }
+}
+
+function validateFinance(totalValue, advancePaid) {
+  if (Number(advancePaid || 0) > Number(totalValue || 0)) {
+    const error = new Error("Advance received cannot be greater than the total contract value.");
     error.status = 422;
     throw error;
   }
@@ -68,10 +78,14 @@ router.post("/", asyncRoute(async (req, res) => {
   const body = clientSchema.parse(req.body);
   const { services, mrr, renewalDate, ...clientBody } = body;
   requireMrrService(mrr, services);
-  const client = await prisma.client.create({
-    data: { ...clientBody, renewalDate: renewalDate ? new Date(renewalDate) : null }
-  });
-  await syncClientServices(client.id, services, mrr);
+  validateFinance(clientBody.totalValue, clientBody.advancePaid);
+  const client = await prisma.$transaction(async (db) => {
+    const created = await db.client.create({
+      data: { ...clientBody, renewalDate: renewalDate ? new Date(renewalDate) : null }
+    });
+    await syncClientServices(created.id, services, mrr, db);
+    return created;
+  }, { maxWait: 10000, timeout: 20000 });
   res.status(201).json({ data: client });
 }));
 
@@ -87,23 +101,33 @@ router.get("/:id", asyncRoute(async (req, res) => {
     }
   });
   if (!client) return res.status(404).json({ message: "Client not found" });
-  res.json({ data: { ...client, mrr: mrrFor(client) } });
+  res.json({ data: { ...client, mrr: mrrFor(client), balanceDue: Math.max(Number(client.totalValue || 0) - Number(client.advancePaid || 0), 0) } });
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
   const body = clientSchema.partial().parse(req.body);
   const { services, mrr, renewalDate, ...rest } = body;
   requireMrrService(mrr, services);
-  if (mrr > 0 && services === undefined) {
-    const activeServiceCount = await prisma.serviceOrder.count({ where: { clientId: req.params.id, status: "ACTIVE" } });
-    requireMrrService(mrr, activeServiceCount ? undefined : []);
-  }
-  const client = await prisma.client.update({
-    where: { id: req.params.id },
-    data: { ...rest, ...(renewalDate !== undefined ? { renewalDate: renewalDate ? new Date(renewalDate) : null } : {}) }
-  });
-  if (Array.isArray(services)) await syncClientServices(client.id, services, mrr);
-  else if (mrr !== undefined) await setClientMrr(client.id, mrr);
+  const client = await prisma.$transaction(async (db) => {
+    const current = await db.client.findUnique({ where: { id: req.params.id } });
+    if (!current) {
+      const error = new Error("Client not found");
+      error.status = 404;
+      throw error;
+    }
+    validateFinance(rest.totalValue ?? current.totalValue, rest.advancePaid ?? current.advancePaid);
+    if (mrr > 0 && services === undefined) {
+      const activeServiceCount = await db.serviceOrder.count({ where: { clientId: req.params.id, status: "ACTIVE" } });
+      requireMrrService(mrr, activeServiceCount ? undefined : []);
+    }
+    const updated = await db.client.update({
+      where: { id: req.params.id },
+      data: { ...rest, ...(renewalDate !== undefined ? { renewalDate: renewalDate ? new Date(renewalDate) : null } : {}) }
+    });
+    if (Array.isArray(services)) await syncClientServices(updated.id, services, mrr, db);
+    else if (mrr !== undefined) await setClientMrr(updated.id, mrr, db);
+    return updated;
+  }, { maxWait: 10000, timeout: 20000 });
   res.json({ data: client });
 }));
 

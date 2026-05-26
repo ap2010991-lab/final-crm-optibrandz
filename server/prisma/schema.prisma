@@ -103,6 +103,7 @@ model Client {
   onboardedAt   DateTime          @default(now())
   renewalDate   DateTime?
   totalValue    Float             @default(0)
+  advancePaid   Float             @default(0)
   leadId        String?           @unique
   lead          Lead?             @relation(fields: [leadId], references: [id])
   createdAt     DateTime          @default(now())

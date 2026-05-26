@@ -20,6 +20,9 @@ router.get("/", asyncRoute(async (_req, res) => {
   const activeClients = clients.filter((client) => client.status === "ACTIVE");
   const activeOrders = serviceOrders.filter((order) => order.status === "ACTIVE");
   const mrr = activeOrders.reduce((sum, order) => sum + Number(order.monthlyValue || 0), 0);
+  const contractedValue = activeClients.reduce((sum, client) => sum + Number(client.totalValue || 0), 0);
+  const advanceReceived = activeClients.reduce((sum, client) => sum + Number(client.advancePaid || 0), 0);
+  const dealBalanceDue = Math.max(contractedValue - advanceReceived, 0);
   const totalOutstanding = invoices.filter((invoice) => invoice.status !== "PAID").reduce((sum, invoice) => sum + Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0), 0);
   const collected = invoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount || 0), 0);
   const invoiced = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount || 0), 0);
@@ -44,6 +47,9 @@ router.get("/", asyncRoute(async (_req, res) => {
   res.json({ data: {
     totalActiveClients: activeClients.length,
     mrr,
+    contractedValue,
+    advanceReceived,
+    dealBalanceDue,
     totalOutstanding,
     collectionRate: invoiced ? Math.round(collected / invoiced * 100) : 0,
     activeServicesCount: activeOrders.length,

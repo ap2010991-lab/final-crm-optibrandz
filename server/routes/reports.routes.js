@@ -12,7 +12,8 @@ router.post("/generate", asyncRoute(async (req, res) => {
     prisma.campaignLog.count({ where: { clientId: body.clientId, month: body.month, year: body.year } }),
     prisma.serviceOrder.count({ where: { clientId: body.clientId, status: "ACTIVE" } })
   ]);
-  const summary = `This month we managed ${serviceCount} services for ${client?.businessName || "client"} with ${campaignCount} campaign records. ${body.nextMonthPlan || "Continue optimization and report weekly progress."}`;
+  const balanceDue = Math.max(Number(client?.totalValue || 0) - Number(client?.advancePaid || 0), 0);
+  const summary = `This month we managed ${serviceCount} services for ${client?.businessName || "client"} with ${campaignCount} campaign records. Deal value: INR ${Number(client?.totalValue || 0).toLocaleString("en-IN")}; advance received: INR ${Number(client?.advancePaid || 0).toLocaleString("en-IN")}; balance due: INR ${balanceDue.toLocaleString("en-IN")}. ${body.nextMonthPlan || "Continue optimization and report weekly progress."}`;
   const report = await prisma.report.create({
     data: { clientId: body.clientId, month: body.month, year: body.year, summary, pdfUrl: `/api/reports/${Date.now()}.pdf` }
   });
