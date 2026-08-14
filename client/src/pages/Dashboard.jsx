@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { money, pretty, shortDate } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import Badge from "../components/Badge";
+import WhenVisible from "../components/WhenVisible";
 
 const DashboardCharts = lazy(() => import("../components/DashboardCharts"));
 
@@ -61,9 +62,11 @@ function DashboardView({ d }) {
       <MiniStat label="Conversion rate" value={`${d.conversionRate || 0}%`} detail="Converted leads vs pipeline" />
     </div>
 
-    <Suspense fallback={<div className="panel h-56 animate-pulse" />}>
-      <DashboardCharts d={d} />
-    </Suspense>
+    <WhenVisible placeholder={<div className="panel h-56 animate-pulse" />}>
+      <Suspense fallback={<div className="panel h-56 animate-pulse" />}>
+        <DashboardCharts d={d} />
+      </Suspense>
+    </WhenVisible>
 
     <div className="grid gap-4 xl:grid-cols-3">
       <ListPanel title="Priority tasks" rows={d.priorityTasks} to="/services"
