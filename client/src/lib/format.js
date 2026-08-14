@@ -12,7 +12,20 @@ export const longDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? "-" : parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-export const pretty = (value) => String(value ?? "").replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
+// Marketing acronyms should stay upper-case: "SEO" reads as a service, "Seo" reads as a
+// typo on a client-facing screen.
+const ACRONYMS = new Set(["SEO", "SMO", "SMM", "GMB", "CTR", "CPL", "GST", "AI", "MRR", "PDF", "URL", "ID", "YOUTUBE"]);
+
+export const pretty = (value) => String(value ?? "")
+  .replaceAll("_", " ")
+  .split(" ")
+  .filter(Boolean)
+  .map((word) => {
+    const upper = word.toUpperCase();
+    if (ACRONYMS.has(upper)) return upper === "YOUTUBE" ? "YouTube" : upper;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  })
+  .join(" ");
 
 // Enum-ish codes such as IN_PROGRESS or META_ADS read better title-cased, but running the
 // same transform over free text mangles it — invoice number OB-2026-014 became
