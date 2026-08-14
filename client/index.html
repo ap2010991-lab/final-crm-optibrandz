@@ -23,9 +23,68 @@
 
     <meta name="theme-color" content="#090909" />
     <meta name="format-detection" content="telephone=no" />
+
+    <!-- Nothing used to paint until React had downloaded, parsed and mounted, which meant
+         roughly 900ms of blank white screen on a phone. This inline shell paints with the
+         HTML itself and React replaces it on first render. -->
+    <style>
+      html, body { margin: 0; background: #fff9ed; }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 84% -5%, rgba(255, 216, 77, 0.22), transparent 28rem),
+          linear-gradient(135deg, #fffdf7 0%, #fff9ed 45%, #f4f1ea 100%);
+      }
+      #boot .mark {
+        display: grid;
+        place-items: center;
+        width: 60px;
+        height: 60px;
+        border-radius: 999px;
+        background: #090909;
+        color: #ffd84d;
+        font-size: 21px;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+      }
+      #boot .bar {
+        width: 132px;
+        height: 4px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(9, 9, 9, 0.08);
+      }
+      #boot .bar i {
+        display: block;
+        width: 45%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #ff7a18, #ffd84d);
+        animation: boot-slide 1s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(320%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .bar i { animation: none; width: 100%; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <div class="mark">OB</div>
+        <div class="bar"><i></i></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
