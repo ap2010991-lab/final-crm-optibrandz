@@ -154,6 +154,12 @@ button, a, select, [role="button"] { touch-action: manipulation; }
   padding-bottom: var(--safe-bottom);
   padding-inline: max(4px, var(--safe-left)) max(4px, var(--safe-right));
 }
+/* Tailwind's utilities live in a cascade layer, and unlayered rules always beat layered
+   ones, so `display: flex` above silently overrode the `lg:hidden` utility and the phone
+   tab bar stayed on screen on desktop. The breakpoint is handled here instead. */
+@media (min-width: 1024px) {
+  .tab-bar { display: none; }
+}
 .tab-item {
   display: flex;
   flex: 1 1 0;
