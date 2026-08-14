@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const { PrismaClient } = require("@prisma/client");
 const {
   users,
@@ -41,6 +43,15 @@ function normalize(record, omit = []) {
 }
 
 async function main() {
+  // This wipes every table, so it must never be pointed at the live database by accident.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DESTRUCTIVE_SEED !== "yes") {
+    throw new Error("Refusing to seed a production database. Set ALLOW_DESTRUCTIVE_SEED=yes if you really mean it.");
+  }
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0 && process.env.ALLOW_DESTRUCTIVE_SEED !== "yes") {
+    throw new Error(`Database already has ${existingUsers} user(s). Seeding would delete them. Set ALLOW_DESTRUCTIVE_SEED=yes to override.`);
+  }
+
   await prisma.notification.deleteMany();
   await prisma.activity.deleteMany();
   await prisma.report.deleteMany();
@@ -54,7 +65,9 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.settings.deleteMany();
 
-  await prisma.user.createMany({ data: users.map((user) => normalize(user)) });
+  const seedPassword = crypto.randomBytes(9).toString("base64url");
+  const seedHash = await bcrypt.hash(seedPassword, 12);
+  await prisma.user.createMany({ data: users.map((user) => ({ ...normalize(user), password: seedHash })) });
   await prisma.lead.createMany({ data: leads.map((lead) => normalize(lead)) });
 
   for (const client of clients) {
@@ -83,6 +96,7 @@ async function main() {
   });
 
   console.log(`Seeded ${users.length} users, ${clients.length} clients, and ${leads.length} leads.`);
+  console.log(`\nSign in with ${users[0].email} and this one-off password:\n\n    ${seedPassword}\n\nChange it from Settings once you are in. It is not stored anywhere else.\n`);
 }
 
 main()

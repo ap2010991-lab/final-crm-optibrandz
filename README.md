@@ -1,50 +1,70 @@
 # OptiBrandz CRM
 
-Full-stack CRM platform for OptiBrandz Marketing Agency, built from the supplied specification.
+Agency CRM for OptiBrandz Marketing Agency, Vapi — leads, clients, services and tasks,
+content calendar, invoices, campaign results, monthly reports and team access, with a
+Gemini-backed assistant.
+
+Built to be used from a phone: it installs to the iPhone home screen and runs full screen.
 
 ## Stack
 
-- Client: React, Vite, Tailwind CSS, React Router, Zustand, React Query, Recharts
-- Server: Node.js, Express, JWT, Zod, PDFKit, node-cron
-- Database target: Supabase Postgres via Prisma
+- **Client** — React 19, Vite, Tailwind CSS v4, React Router, Zustand, TanStack Query, Recharts
+- **Server** — Node.js, Express 5, JWT, Zod, PDFKit, Prisma
+- **Database** — Supabase Postgres
 
-## Local Run
+## Local development
 
 ```bash
-npm install
+npm install && npm install --prefix client && npm install --prefix server
+cp server/.env.example server/.env   # then fill in the values
+npm run db:generate --prefix server
+npm run db:push --prefix server
 npm run dev
 ```
 
-Client: `http://localhost:5173`
-Server: `http://localhost:3001`
+Client runs on `http://localhost:5173`, API on `http://localhost:3001`.
 
-Demo owner login:
+There is no default password. Create the first owner account directly in the database with
+a bcrypt hash, then change it from **Settings → Change your password** once you are in.
 
-- Email: `alok@optibrandz.in`
-- Password: `admin123`
+## Environment variables
 
-The server includes a seeded in-memory data layer for immediate local testing. Supabase/Postgres setup is documented in `SUPABASE_SETUP.md`, with the Prisma schema at `server/prisma/schema.prisma`.
+Required in Vercel (and in `server/.env` locally):
 
-## Editing Demo Data
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Pooled Supabase connection string (port 6543) |
+| `DIRECT_URL` | Direct connection string (port 5432), used for schema pushes |
+| `JWT_SECRET` | Long random string. The API refuses to boot in production without it |
+| `JWT_EXPIRES_IN` | Token lifetime, e.g. `7d` |
+| `CRON_SECRET` | Shared secret for the scheduled jobs below |
+| `GEMINI_API_KEY` | Optional. Without it the AI section runs in demo mode |
+| `GEMINI_MODEL` | Optional, defaults to `gemini-2.5-flash` |
+| `CLIENT_URL` | Optional. Same-origin requests and this deployment's own URL are always allowed |
 
-The app clearly marks the seeded records as demo data. Replace them from the normal CRM pages using the Add and Edit buttons on Clients, Leads, Services, Content, Invoices, and Campaigns. Dashboard numbers update from those same records.
+## Scheduled jobs
 
-## Daily Notifications
+`node-cron` only fires inside a process that stays alive, so on Vercel the nightly work is
+driven by Vercel Cron calling these routes with `Authorization: Bearer $CRON_SECRET`:
 
-The bell icon opens Today’s Action Center. It automatically lists overdue and due-today work from the CRM: invoices, tasks, lead follow-ups, client renewals, and scheduled content. Each notification links back to the page where you can handle it.
+- `GET /api/cron/daily` — marks overdue invoices, files task and follow-up reminders
+- `GET /api/cron/renewals` — warns about renewals due in the next 30 days
 
-## Vercel Deploy
+Both are configured in `vercel.json`. Running the server as a long-lived process
+(`npm run start --prefix server`) registers the same jobs through node-cron instead.
 
-This repo includes `vercel.json` and `api/index.js` so Vercel can build the React client and run the Express API as a serverless function.
+## Installing on an iPhone
 
-In Vercel, add these environment variables:
+1. Open the CRM in Safari.
+2. Tap Share → **Add to Home Screen**.
+3. Launch it from the home screen. It runs full screen with no Safari chrome, and the
+   layout clears the notch and the home indicator.
 
-- `DATABASE_URL`
-- `DIRECT_URL`
-- `JWT_SECRET`
-- `JWT_EXPIRES_IN=7d`
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL=gemini-2.5-flash`
-- `CLIENT_URL=https://your-vercel-domain.vercel.app`
+## Security notes
 
-Do not commit `server/.env`; it is for local development only.
+- All API routes except `/api/health`, `/api/auth/login` and the public invoice PDF require
+  a bearer token, and each section is additionally gated by permission on the server.
+- Invoice PDFs shared over WhatsApp are readable without a login by design — the link
+  contains a random UUID and is served `noindex`.
+- Eight failed sign-ins lock an account for 15 minutes.
+- Never commit `server/.env`.

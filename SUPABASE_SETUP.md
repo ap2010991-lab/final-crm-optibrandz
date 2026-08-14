@@ -55,6 +55,7 @@ DIRECT_URL
 JWT_SECRET
 JWT_EXPIRES_IN
 CLIENT_URL
+CRON_SECRET
 GEMINI_API_KEY
 GEMINI_MODEL
 NODE_ENV=production
@@ -63,11 +64,11 @@ NODE_ENV=production
 For `CLIENT_URL`, use your deployed Vercel URL, for example:
 
 ```bash
-CLIENT_URL=https://crm-optibrandz.vercel.app
+CLIENT_URL=https://your-deployment.vercel.app
 ```
 
 ## 5. Important Notes
 
 - Do not put Supabase service-role keys in the React frontend.
-- The app currently keeps the UI/API shape from the local CRM. The schema and seed are ready for Supabase persistence; route-by-route database reads/writes should be migrated next so records no longer reset on server restart.
-- Keep using the owner login after seeding: `alok@optibrandz.in` with password `admin123`, then change it in the database/admin flow before real production use.
+- Every route reads and writes Supabase through Prisma; nothing is kept in memory.
+- Do not seed demo users into a production database. Create the owner account with a bcrypt hash you generate yourself, then change the password from Settings once signed in.
