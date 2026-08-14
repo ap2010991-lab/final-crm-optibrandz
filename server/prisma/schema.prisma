@@ -19,6 +19,8 @@ model User {
   permissions   String[]       @default([])
   clientId      String?
   isActive      Boolean        @default(true)
+  failedLoginCount Int         @default(0)
+  lockedUntil   DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   tasks         Task[]
@@ -367,11 +369,17 @@ model Notification {
 }
 
 model Settings {
-  id          String   @id @default(uuid())
-  agencyName  String   @default("OptiBrandz")
-  logoUrl     String?
-  address     String?
-  bankDetails Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  agencyName   String   @default("OptiBrandz")
+  logoUrl      String?
+  address      String?
+  phone        String?
+  whatsapp     String?
+  email        String?
+  website      String?
+  gstNumber    String?
+  invoiceNotes String?
+  bankDetails  Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

@@ -8,33 +8,45 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const verifyToken = require("./middleware/verifyToken");
 const requirePermission = require("./middleware/requirePermission");
+const requireRole = require("./middleware/requireRole");
+const { isAllowedOrigin } = require("./utils/allowedOrigins");
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-const allowedOrigins = new Set([
-  process.env.CLIENT_URL || "http://localhost:5173",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173"
-]);
-
+// The API and the React build are served from the same origin in production, but
+// browsers still send an Origin header on same-origin POST/PUT/DELETE. Rejecting an
+// unknown origin with an Error made every write fail with HTTP 500, so unknown
+// origins are now simply refused CORS headers instead of crashing the request.
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked origin ${origin}`));
+    callback(null, isAllowedOrigin(origin, app.locals.currentHost));
   },
   credentials: true
 }));
-app.use(express.json({ limit: "5mb" }));
+
+// Remember the host we are actually served on so same-origin requests are always
+// recognised, whatever preview/production URL Vercel assigns to this deployment.
+app.use((req, _res, next) => {
+  if (req.headers.host) app.locals.currentHost = req.headers.host;
+  next();
+});
+
+// Vercel rejects request bodies above 4.5 MB before they reach this function.
+app.use(express.json({ limit: "4mb" }));
 app.use(cookieParser());
 app.use("/api", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "same-origin");
   next();
 });
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, name: "OptiBrandz CRM API" }));
 app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/public/invoices", require("./routes/public-invoices.routes"));
+app.use("/api/cron", require("./routes/cron.routes"));
+app.use("/api/settings", verifyToken, require("./routes/settings.routes"));
 app.use("/api/dashboard", verifyToken, requirePermission("dashboard"), require("./routes/dashboard.routes"));
 app.use("/api/leads", verifyToken, requirePermission("leads"), require("./routes/leads.routes"));
 app.use("/api/clients", verifyToken, requirePermission("clients"), require("./routes/clients.routes"));
@@ -47,19 +59,30 @@ app.use("/api/reports", verifyToken, requirePermission("reports"), require("./ro
 app.use("/api/notifications", verifyToken, require("./routes/notifications.routes"));
 app.use("/api/search", verifyToken, require("./routes/search.routes"));
 app.use("/api/ai", verifyToken, requirePermission("ai"), require("./routes/ai.routes"));
-app.use("/api/team", verifyToken, requirePermission("team"), require("./routes/team.routes"));
+app.use("/api/team", verifyToken, requireRole(["OWNER"]), requirePermission("team"), require("./routes/team.routes"));
 
-const { registerDailyAlerts } = require("./jobs/daily-alerts.job");
-const { registerRenewalAlerts } = require("./jobs/renewal-alerts.job");
-registerDailyAlerts();
-registerRenewalAlerts();
+app.use("/api", (_req, res) => res.status(404).json({ message: "API route not found" }));
 
 app.use((err, _req, res, _next) => {
   const status = err.status || (err.name === "ZodError" ? 422 : 500);
-  res.status(status).json({ message: err.message || "Server error", issues: err.issues });
+  if (status >= 500) console.error(err);
+  const message = err.name === "ZodError"
+    ? "Some fields are not filled in correctly."
+    : status >= 500 && process.env.NODE_ENV === "production"
+      ? "Something went wrong. Please try again."
+      : err.message || "Server error";
+  res.status(status).json({ message, issues: err.issues });
 });
 
+// node-cron only fires inside a process that stays alive. On Vercel each request runs
+// in a serverless function that is frozen straight after responding, so these jobs
+// never ran there. They are registered for long-running hosts only; on Vercel the
+// same work is driven by Vercel Cron hitting /api/cron/daily.
 if (require.main === module) {
+  const { registerDailyAlerts } = require("./jobs/daily-alerts.job");
+  const { registerRenewalAlerts } = require("./jobs/renewal-alerts.job");
+  registerDailyAlerts();
+  registerRenewalAlerts();
   app.listen(port, () => {
     console.log(`OptiBrandz CRM API running on http://localhost:${port}`);
   });

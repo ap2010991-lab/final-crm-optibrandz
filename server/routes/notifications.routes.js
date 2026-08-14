@@ -26,13 +26,23 @@ function isOverdue(value) {
   return value ? new Date(value) < startOfDay() : false;
 }
 
+function can(user, permission) {
+  if (user.role === "OWNER") return true;
+  return (user.permissions || []).includes(permission);
+}
+
+// The action centre is available to every login, so each section is loaded only when
+// the user actually has permission for it. A designer no longer receives invoice
+// totals or renewal figures for clients they cannot open.
 async function buildActionNotifications(user) {
   const [clients, leads, invoices, tasks, calendarItems, serviceOrders] = await Promise.all([
-    prisma.client.findMany({ where: user.role === "CLIENT" ? { id: user.clientId } : {} }),
-    prisma.lead.findMany(),
-    prisma.invoice.findMany(),
+    user.role === "CLIENT"
+      ? prisma.client.findMany({ where: { id: user.clientId || "__none__" } })
+      : can(user, "clients") || can(user, "invoices") ? prisma.client.findMany() : [],
+    can(user, "leads") ? prisma.lead.findMany() : [],
+    can(user, "invoices") ? prisma.invoice.findMany() : [],
     prisma.task.findMany(),
-    prisma.contentCalendar.findMany(),
+    can(user, "content") ? prisma.contentCalendar.findMany() : [],
     prisma.serviceOrder.findMany()
   ]);
   const visibleClientIds = new Set(clients.map((client) => client.id));
@@ -51,11 +61,11 @@ async function buildActionNotifications(user) {
     items.push({ id: `lead-${lead.id}`, userId: user.id, type: "LEAD", title: isOverdue(lead.followUpDate) ? "Overdue lead follow-up" : "Lead follow-up today", message: `${lead.businessName || lead.name} · ${lead.phone}`, link: `/leads/${lead.id}`, dueAt: lead.followUpDate, isRead: false, priority: isOverdue(lead.followUpDate) ? "HIGH" : "MEDIUM" });
   });
 
-  invoices.filter((invoice) => visibleClientIds.has(invoice.clientId) && invoice.status !== "PAID" && (isToday(invoice.dueDate) || isOverdue(invoice.dueDate))).forEach((invoice) => {
+  invoices.filter((invoice) => visibleClientIds.has(invoice.clientId) && !["PAID", "CANCELLED"].includes(invoice.status) && (isToday(invoice.dueDate) || isOverdue(invoice.dueDate))).forEach((invoice) => {
     items.push({ id: `invoice-${invoice.id}`, userId: user.id, type: "INVOICE", title: isOverdue(invoice.dueDate) ? "Overdue invoice" : "Invoice due today", message: `${invoice.invoiceNumber} · ${clientName(invoice.clientId)} · ₹${Number(invoice.totalAmount || 0).toLocaleString("en-IN")}`, link: "/invoices", dueAt: invoice.dueDate, isRead: false, priority: isOverdue(invoice.dueDate) ? "HIGH" : "MEDIUM" });
   });
 
-  clients.filter((client) => isToday(client.renewalDate) || (client.renewalDate && new Date(client.renewalDate) <= new Date(Date.now() + 7 * 86400000))).forEach((client) => {
+  (can(user, "clients") ? clients : []).filter((client) => client.renewalDate && new Date(client.renewalDate) >= startOfDay() && new Date(client.renewalDate) <= new Date(Date.now() + 7 * 86400000)).forEach((client) => {
     items.push({ id: `renewal-${client.id}`, userId: user.id, type: "RENEWAL", title: isToday(client.renewalDate) ? "Renewal due today" : "Renewal due soon", message: `${client.businessName} renewal · health ${client.healthScore}%`, link: `/clients/${client.id}`, dueAt: client.renewalDate, isRead: false, priority: isToday(client.renewalDate) ? "HIGH" : "MEDIUM" });
   });
 

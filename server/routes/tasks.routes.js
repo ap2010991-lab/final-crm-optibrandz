@@ -23,9 +23,23 @@ const taskPutSchema = z.object({
   assignedToId: z.string().optional()
 });
 
+function parseDate(value, field) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error(`Enter a valid ${field}.`);
+    error.status = 422;
+    throw error;
+  }
+  return date;
+}
+
 router.post("/", asyncRoute(async (req, res) => {
   const body = taskSchema.parse(req.body);
-  const task = await prisma.task.create({ data: { ...body, dueDate: new Date(body.dueDate) } });
+  const assignee = await prisma.user.findFirst({ where: { id: body.assignedToId, isActive: true } });
+  if (!assignee) return res.status(422).json({ message: "Choose an active team member for this task." });
+  const task = await prisma.task.create({
+    data: { ...body, serviceOrderId: body.serviceOrderId || null, dueDate: parseDate(body.dueDate, "due date") }
+  });
   res.status(201).json({ data: task });
 }));
 
@@ -61,15 +75,26 @@ router.get("/", asyncRoute(async (req, res) => {
 
 router.put("/:id", asyncRoute(async (req, res) => {
   const body = taskPutSchema.parse(req.body);
+  const current = await prisma.task.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ message: "Task not found" });
   const task = await prisma.task.update({
     where: { id: req.params.id },
     data: {
       ...body,
-      ...(body.dueDate ? { dueDate: new Date(body.dueDate) } : {}),
-      ...(body.status === "DONE" ? { completedAt: new Date() } : {})
+      ...(body.dueDate ? { dueDate: parseDate(body.dueDate, "due date") } : {}),
+      // Re-opening a completed task has to clear completedAt, otherwise it stays
+      // counted as finished in the workload figures.
+      ...(body.status ? { completedAt: body.status === "DONE" ? current.completedAt || new Date() : null } : {})
     }
   });
   res.json({ data: task });
+}));
+
+router.delete("/:id", asyncRoute(async (req, res) => {
+  const current = await prisma.task.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ message: "Task not found" });
+  await prisma.task.delete({ where: { id: req.params.id } });
+  res.json({ data: current });
 }));
 
 module.exports = router;

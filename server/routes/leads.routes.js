@@ -22,8 +22,23 @@ const leadSchema = z.object({
   followUpDate: z.string().optional().nullable()
 });
 
-const scoreLead = (lead) => (lead.budget ? 20 : 0) + (lead.serviceInterest?.length || 0) * 15 + (lead.email ? 10 : 0);
-const leadDates = (body) => ({ ...body, followUpDate: body.followUpDate ? new Date(body.followUpDate) : body.followUpDate });
+const scoreLead = (lead) => Math.min(100, (lead.budget ? 20 : 0) + (lead.serviceInterest?.length || 0) * 15 + (lead.email ? 10 : 0));
+
+// An empty date string used to reach Prisma as "" and blow up with a 500. Blank now
+// means "clear the date", and a nonsense date is rejected with a readable message.
+function optionalDate(value, field) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error(`Enter a valid ${field}.`);
+    error.status = 422;
+    throw error;
+  }
+  return date;
+}
+
+const leadDates = (body) => ({ ...body, followUpDate: optionalDate(body.followUpDate, "follow-up date") });
 
 router.get("/", asyncRoute(async (req, res) => {
   const { status, source, assignedToId, q = "" } = req.query;
@@ -72,7 +87,9 @@ router.put("/:id", asyncRoute(async (req, res) => {
   res.json({ data: lead });
 }));
 
-router.delete("/:id", asyncRoute(async (req, res) => {
+router.delete("/:id", requireRole(["OWNER", "ACCOUNT_MANAGER"]), asyncRoute(async (req, res) => {
+  const current = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ message: "Lead not found" });
   const lead = await prisma.lead.delete({ where: { id: req.params.id } });
   res.json({ data: lead });
 }));
@@ -83,24 +100,34 @@ router.post("/:id/activity", asyncRoute(async (req, res) => {
   res.status(201).json({ data: activity });
 }));
 
+// Converting the same lead twice used to hit the unique constraint on Client.leadId and
+// surface as a 500. A second conversion now just returns the client already created.
 router.post("/:id/convert", requireRole(["OWNER", "ACCOUNT_MANAGER"]), asyncRoute(async (req, res) => {
   const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
   if (!lead) return res.status(404).json({ message: "Lead not found" });
-  const client = await prisma.client.create({
-    data: {
-      businessName: lead.businessName || lead.name,
-      contactPerson: lead.name,
-      phone: lead.phone,
-      email: lead.email,
-      city: lead.city,
-      status: "ONBOARDING",
-      healthScore: 100,
-      totalValue: 0,
-      leadId: lead.id
-    }
-  });
-  await syncClientServices(client.id, lead.serviceInterest);
-  await prisma.lead.update({ where: { id: lead.id }, data: { status: "CONVERTED", convertedAt: new Date() } });
+
+  const already = await prisma.client.findUnique({ where: { leadId: lead.id } });
+  if (already) return res.status(200).json({ data: already, alreadyConverted: true });
+
+  const client = await prisma.$transaction(async (db) => {
+    const created = await db.client.create({
+      data: {
+        businessName: lead.businessName || lead.name,
+        contactPerson: lead.name,
+        phone: lead.phone,
+        email: lead.email,
+        city: lead.city,
+        status: "ONBOARDING",
+        healthScore: 100,
+        totalValue: 0,
+        leadId: lead.id
+      }
+    });
+    await syncClientServices(created.id, lead.serviceInterest, undefined, db);
+    await db.lead.update({ where: { id: lead.id }, data: { status: "CONVERTED", convertedAt: new Date() } });
+    return created;
+  }, { maxWait: 10000, timeout: 20000 });
+
   res.status(201).json({ data: client });
 }));
 

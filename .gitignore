@@ -1,11 +1,11 @@
 node_modules
 dist
 .env
+.env.*
+!.env.example
 .DS_Store
 server/generated
 server/prisma/migrations
 *.log
-qa-*.png
-final-*.png
-optibrandz-website-reference.png
 .vercel
+.claude

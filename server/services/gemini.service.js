@@ -2,14 +2,26 @@ const prisma = require("../db/prisma");
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-async function crmSnapshot() {
+// The snapshot is attached to every Gemini call, so it must only contain what the
+// signed-in user is already allowed to see in the CRM. Previously a designer with no
+// clients or leads permission still had the full client list and lead notes sent out.
+function can(user, permission) {
+  if (!user) return false;
+  if (user.role === "OWNER") return true;
+  return (user.permissions || []).includes(permission);
+}
+
+async function crmSnapshot(user) {
   const [clients, leads, invoices, tasks, campaigns, calendarItems] = await Promise.all([
-    prisma.client.findMany({ include: { services: true }, take: 25 }),
-    prisma.lead.findMany({ take: 25 }),
-    prisma.invoice.findMany({ take: 25 }),
-    prisma.task.findMany({ where: { status: { not: "DONE" } }, take: 25 }),
-    prisma.campaignLog.findMany({ take: 25 }),
-    prisma.contentCalendar.count()
+    can(user, "clients") ? prisma.client.findMany({ include: { services: true }, take: 25 }) : [],
+    can(user, "leads") ? prisma.lead.findMany({ take: 25 }) : [],
+    can(user, "invoices") ? prisma.invoice.findMany({ take: 25 }) : [],
+    prisma.task.findMany({
+      where: { status: { not: "DONE" }, ...(user?.role === "OWNER" ? {} : { assignedToId: user?.id }) },
+      take: 25
+    }),
+    can(user, "campaigns") ? prisma.campaignLog.findMany({ take: 25 }) : [],
+    can(user, "content") ? prisma.contentCalendar.count() : 0
   ]);
   return {
     clients: clients.map(({ id, businessName, city, industry, healthScore, status, totalValue, advancePaid, services, renewalDate }) => ({ id, businessName, city, industry, healthScore, status, totalValue, advancePaid, balanceDue: Math.max(Number(totalValue || 0) - Number(advancePaid || 0), 0), services: services.map((item) => item.serviceType), renewalDate })),
@@ -55,7 +67,8 @@ async function systemPrompt(user) {
 Be practical, concise, sales-aware, and agency-operations focused.
 Use Indian business context, WhatsApp-friendly wording, and INR where needed.
 Current signed-in user: ${user?.name || "CRM user"} (${user?.role || "ACCOUNT_MANAGER"}).
-CRM snapshot JSON: ${JSON.stringify(await crmSnapshot())}`;
+Only answer from the CRM snapshot below. It already excludes anything this user may not see.
+CRM snapshot JSON: ${JSON.stringify(await crmSnapshot(user))}`;
 }
 
 module.exports = { callGemini, fallbackResponse, hasGeminiKey, systemPrompt };

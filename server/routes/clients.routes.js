@@ -1,21 +1,22 @@
 const express = require("express");
 const { z } = require("zod");
 const prisma = require("../db/prisma");
+const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { syncClientServices, setClientMrr } = require("../utils/syncClientServices");
 
 const router = express.Router();
 
 const clientSchema = z.object({
-  businessName: z.string(),
-  contactPerson: z.string(),
-  phone: z.string(),
+  businessName: z.string().min(1, "Business name is required."),
+  contactPerson: z.string().min(1, "Contact person is required."),
+  phone: z.string().min(5, "Enter a valid phone number."),
   email: z.string().nullable().optional(),
   city: z.string().nullable().optional(),
   industry: z.string().nullable().optional(),
   websiteUrl: z.string().nullable().optional(),
   status: z.string().default("ACTIVE"),
-  healthScore: z.number().default(100),
+  healthScore: z.number().min(0).max(100).default(100),
   totalValue: z.number().min(0).default(0),
   advancePaid: z.number().min(0).default(0),
   mrr: z.number().min(0).optional(),
@@ -32,7 +33,7 @@ const clientUpdateSchema = z.object({
   industry: z.string().nullable().optional(),
   websiteUrl: z.string().nullable().optional(),
   status: z.string().optional(),
-  healthScore: z.number().optional(),
+  healthScore: z.number().min(0).max(100).optional(),
   totalValue: z.number().min(0).optional(),
   advancePaid: z.number().min(0).optional(),
   mrr: z.number().min(0).optional(),
@@ -148,7 +149,11 @@ router.put("/:id", asyncRoute(async (req, res) => {
   res.json({ data: client });
 }));
 
-router.delete("/:id", asyncRoute(async (req, res) => {
+// Deleting a client cascades to their services, tasks, invoices, campaigns, content and
+// activity, so it is restricted to the owner.
+router.delete("/:id", requireRole(["OWNER"]), asyncRoute(async (req, res) => {
+  const current = await prisma.client.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ message: "Client not found" });
   const client = await prisma.client.delete({ where: { id: req.params.id } });
   res.json({ data: client });
 }));
