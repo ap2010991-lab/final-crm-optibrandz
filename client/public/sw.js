@@ -1,18 +1,23 @@
 /* Optibrandz CRM service worker.
  *
- * Deliberately conservative: it caches the app shell so the CRM opens instantly from the
- * home screen and shows a proper offline screen instead of Safari's error page. It never
- * caches /api responses — stale invoice totals or lead stages would be worse than an
- * honest "you are offline".
+ * Deliberately narrow. An earlier version proxied every same-origin GET through
+ * caches.match(), which made cached CSS and JS take ~360ms each and pushed first paint
+ * out to ~900ms — the worker was costing more than it saved.
+ *
+ * Now it only handles navigations, so the app still opens offline from the home screen,
+ * and it stays out of the way of everything else:
+ *   - /assets/* are content-hashed and served immutable for a year, so the browser's own
+ *     HTTP cache is already the fastest possible path. Intercepting them only adds a hop.
+ *   - /api/* is never cached; a stale invoice total is worse than an honest error.
  */
-const VERSION = "ob-crm-v2";
+const VERSION = "ob-crm-v3";
 const SHELL_CACHE = `${VERSION}-shell`;
-const SHELL_URLS = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
+const SHELL_URL = "/index.html";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_URLS))
+      .then((cache) => cache.add(SHELL_URL))
       .then(() => self.skipWaiting())
       .catch(() => self.skipWaiting())
   );
@@ -32,37 +37,30 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET") return;
+  if (request.method !== "GET" || request.mode !== "navigate") return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // Live data and PDFs always go to the network.
-  if (url.pathname.startsWith("/api/")) return;
 
-  // Navigations: network first so a deploy is picked up immediately, falling back to the
-  // cached shell when there is no signal.
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
+  // Serve the cached shell immediately so a home-screen launch paints at once, and
+  // refresh it in the background so the next launch has the latest build. main.jsx
+  // reloads the page when a new service worker takes over, so a deploy still lands.
+  event.respondWith(
+    caches.open(SHELL_CACHE).then(async (cache) => {
+      const cached = await cache.match(SHELL_URL);
+      const network = fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put("/", copy)).catch(() => {});
+          if (response && response.ok) cache.put(SHELL_URL, response.clone());
           return response;
         })
-        .catch(() => caches.match("/").then((cached) => cached || offlineResponse()))
-    );
-    return;
-  }
+        .catch(() => null);
 
-  // Hashed build assets are immutable, so cache-first is safe and makes launches fast.
-  event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok && (url.pathname.startsWith("/assets/") || SHELL_URLS.includes(url.pathname))) {
-        const copy = response.clone();
-        caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+      if (cached) {
+        event.waitUntil(network);
+        return cached;
       }
-      return response;
-    }))
+      return (await network) || offlineResponse();
+    })
   );
 });
 
