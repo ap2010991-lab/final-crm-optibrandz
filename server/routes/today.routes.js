@@ -33,7 +33,7 @@ router.get("/", asyncRoute(async (req, res) => {
   const weekEnd = new Date(today.getTime() + 7 * 86400000);
   const { start: monthStart, end: monthEnd } = monthBounds();
 
-  const [retainerClients, invoicedThisMonth, overdueInvoices, contentDue, plannedThisMonth, activeClients, renewals, staleLeads] =
+  const [retainerClients, invoicedThisMonth, overdueInvoices, contentDue, plannedThisMonth, postedThisMonth, activeClients, renewals, staleLeads] =
     await Promise.all([
       // Clients on a monthly retainer are the basis of the billing run.
       can(user, "invoices")
@@ -77,8 +77,18 @@ router.get("/", asyncRoute(async (req, res) => {
             _count: { _all: true }
           })
         : [],
+      can(user, "content")
+        ? prisma.contentCalendar.groupBy({
+            by: ["clientId"],
+            where: { status: "PUBLISHED", scheduledDate: { gte: monthStart, lt: monthEnd } },
+            _count: { _all: true }
+          })
+        : [],
       can(user, "clients")
-        ? prisma.client.findMany({ where: { status: "ACTIVE" }, select: { id: true, businessName: true } })
+        ? prisma.client.findMany({
+            where: { status: "ACTIVE" },
+            select: { id: true, businessName: true, monthlyContentTarget: true }
+          })
         : [],
       can(user, "clients")
         ? prisma.client.findMany({
@@ -112,7 +122,24 @@ router.get("/", asyncRoute(async (req, res) => {
     .filter((client) => client.amount > 0 && !invoicedClientIds.has(client.id));
 
   const plannedByClient = new Map(plannedThisMonth.map((row) => [row.clientId, row._count._all]));
-  const noContentPlanned = activeClients.filter((client) => !plannedByClient.get(client.id));
+  const postedByClient = new Map(postedThisMonth.map((row) => [row.clientId, row._count._all]));
+
+  // A client is only "short" when a commitment exists to fall short of. Clients with no
+  // target are simply not on a content plan, which is not a problem to report.
+  const shortfalls = activeClients
+    .filter((client) => Number(client.monthlyContentTarget) > 0)
+    .map((client) => ({
+      id: client.id,
+      businessName: client.businessName,
+      target: client.monthlyContentTarget,
+      planned: plannedByClient.get(client.id) || 0,
+      posted: postedByClient.get(client.id) || 0
+    }))
+    .filter((client) => client.planned < client.target)
+    .sort((a, b) => (a.planned - a.target) - (b.planned - b.target));
+
+  const noContentPlanned = activeClients
+    .filter((client) => !plannedByClient.get(client.id) && !Number(client.monthlyContentTarget));
 
   res.json({
     data: {
@@ -135,6 +162,7 @@ router.get("/", asyncRoute(async (req, res) => {
       },
       slipping: {
         noContentPlanned: noContentPlanned.map((client) => ({ id: client.id, businessName: client.businessName })),
+        shortfalls,
         renewals,
         staleLeads
       }

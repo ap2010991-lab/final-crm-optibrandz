@@ -33,5 +33,6 @@ export const clientFields = [
   { name: "totalValue", label: "Total deal value", kind: "money" },
   { name: "advancePaid", label: "Advance received", kind: "money" },
   { name: "healthScore", label: "Health score (0-100)", kind: "int" },
+  { name: "monthlyContentTarget", label: "Posts owed per month", kind: "int", nullable: true, help: "What you committed to deliver. Leave blank if this client is not on a content plan." },
   { name: "renewalDate", label: "Renewal date", kind: "date", type: "date" }
 ];

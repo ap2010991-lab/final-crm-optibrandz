@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
+const { onlyProvided } = require("../utils/onlyProvided");
 const { syncClientServices } = require("../utils/syncClientServices");
 
 const router = express.Router();
@@ -79,7 +80,7 @@ router.get("/:id", asyncRoute(async (req, res) => {
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
-  const body = leadSchema.partial().parse(req.body);
+  const body = onlyProvided(req.body, leadSchema.partial().parse(req.body));
   const current = await prisma.lead.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ message: "Lead not found" });
   const data = leadDates({ ...body, score: scoreLead({ ...current, ...body }) });

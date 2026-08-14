@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
+const { onlyProvided } = require("../utils/onlyProvided");
 const { streamInvoicePdf } = require("../utils/invoicePdf");
 
 const router = express.Router();
@@ -204,7 +205,7 @@ router.get("/:id", asyncRoute(async (req, res) => {
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
-  const body = invoiceSchema.partial().parse(req.body);
+  const body = onlyProvided(req.body, invoiceSchema.partial().parse(req.body));
   const current = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ message: "Invoice not found" });
   const merged = {

@@ -22,11 +22,23 @@ router.post("/generate", asyncRoute(async (req, res) => {
     nextMonthPlan: z.string().max(2000).optional()
   }).parse(req.body);
 
-  const [client, campaigns, serviceCount, invoices] = await Promise.all([
+  const monthStart = new Date(body.year, body.month - 1, 1);
+  const monthEnd = new Date(body.year, body.month, 1);
+
+  // The report used to be boilerplate that read the same whatever had happened. It is now
+  // assembled from what was actually delivered in the month, so it is worth sending.
+  const [client, campaigns, services, invoices, posted] = await Promise.all([
     prisma.client.findUnique({ where: { id: body.clientId } }),
     prisma.campaignLog.findMany({ where: { clientId: body.clientId, month: body.month, year: body.year } }),
-    prisma.serviceOrder.count({ where: { clientId: body.clientId, status: "ACTIVE" } }),
-    prisma.invoice.findMany({ where: { clientId: body.clientId } })
+    prisma.serviceOrder.findMany({
+      where: { clientId: body.clientId, status: "ACTIVE" },
+      select: { serviceType: true }
+    }),
+    prisma.invoice.findMany({ where: { clientId: body.clientId } }),
+    prisma.contentCalendar.findMany({
+      where: { clientId: body.clientId, status: "PUBLISHED", scheduledDate: { gte: monthStart, lt: monthEnd } },
+      select: { platform: true, postType: true }
+    })
   ]);
   if (!client) return res.status(422).json({ message: "Choose a client to report on." });
 
@@ -37,14 +49,33 @@ router.post("/generate", asyncRoute(async (req, res) => {
     .filter((invoice) => !["PAID", "CANCELLED"].includes(invoice.status))
     .reduce((sum, invoice) => sum + Math.max(Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0), 0), 0);
 
+  const countBy = (rows, key) => rows.reduce((acc, row) => ({ ...acc, [row[key]]: (acc[row[key]] || 0) + 1 }), {});
+  const describe = (counts) => Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${count} ${String(name).toLowerCase().replaceAll("_", " ")}`)
+    .join(", ");
+
+  const target = Number(client.monthlyContentTarget) || 0;
+  const deliveryLine = posted.length
+    ? `Published ${posted.length} post${posted.length === 1 ? "" : "s"}${target ? ` of the ${target} committed` : ""}`
+      + ` — ${describe(countBy(posted, "postType"))} across ${describe(countBy(posted, "platform"))}.`
+    : target
+      ? `No posts were published this month against a commitment of ${target}.`
+      : "No posts were published this month.";
+
   const summary = [
     `${monthName(body.month, body.year)} report for ${client.businessName}.`,
-    `${serviceCount} active service${serviceCount === 1 ? "" : "s"} delivered across ${campaigns.length} campaign record${campaigns.length === 1 ? "" : "s"}.`,
-    campaigns.length ? `Ad spend ${inr(adSpend)} produced ${campaignLeads} lead${campaignLeads === 1 ? "" : "s"}${campaignLeads ? ` at ${inr(Math.round(adSpend / campaignLeads))} per lead` : ""}.` : "No campaign data was logged for this month.",
+    deliveryLine,
+    services.length
+      ? `Services running: ${services.map((service) => String(service.serviceType).toLowerCase().replaceAll("_", " ")).join(", ")}.`
+      : "No active services this month.",
+    campaigns.length
+      ? `Ad spend ${inr(adSpend)} produced ${campaignLeads} lead${campaignLeads === 1 ? "" : "s"}${campaignLeads ? ` at ${inr(Math.round(adSpend / campaignLeads))} per lead` : ""}.`
+      : null,
     `Deal value ${inr(client.totalValue)}, advance received ${inr(client.advancePaid)}, balance due ${inr(balanceDue)}.`,
     outstanding ? `Invoices outstanding: ${inr(outstanding)}.` : "All invoices are settled.",
     body.nextMonthPlan || "Next month: continue optimisation and report weekly progress."
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 
   // The old code stored a pdfUrl pointing at /api/reports/<timestamp>.pdf, a route that
   // never existed. The PDF is now generated on demand from the report id.

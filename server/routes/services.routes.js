@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
+const { onlyProvided } = require("../utils/onlyProvided");
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ router.post("/", asyncRoute(async (req, res) => {
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
-  const body = serviceSchema.partial().parse(req.body);
+  const body = onlyProvided(req.body, serviceSchema.partial().parse(req.body));
   const current = await prisma.serviceOrder.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ message: "Service not found" });
   const order = await prisma.serviceOrder.update({

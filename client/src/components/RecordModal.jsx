@@ -24,9 +24,14 @@ export default function RecordModal({ title, initial = {}, fields, onSubmit, onC
         case "number":
           payload[field.name] = raw === "" || raw === undefined || raw === null ? 0 : Number(raw);
           break;
-        case "int":
-          payload[field.name] = raw === "" || raw === undefined || raw === null ? 0 : Math.round(Number(raw));
+        case "int": {
+          const blank = raw === "" || raw === undefined || raw === null;
+          // A nullable number distinguishes "not set" from "zero". Leaving the monthly
+          // content target blank means this client is not on a content plan at all, which
+          // is different from owing them nothing.
+          payload[field.name] = blank ? (field.nullable ? null : 0) : Math.round(Number(raw));
           break;
+        }
         case "multi":
           payload[field.name] = Array.isArray(raw) ? raw : splitList(raw);
           break;

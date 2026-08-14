@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
+const { onlyProvided } = require("../utils/onlyProvided");
 
 const router = express.Router();
 
@@ -81,7 +82,7 @@ router.post("/bulk", asyncRoute(async (req, res) => {
 }));
 
 router.put("/:id", asyncRoute(async (req, res) => {
-  const body = calendarSchema.partial().parse(req.body);
+  const body = onlyProvided(req.body, calendarSchema.partial().parse(req.body));
   const item = await prisma.contentCalendar.update({
     where: { id: req.params.id },
     data: { ...body, ...(body.scheduledDate ? { scheduledDate: new Date(body.scheduledDate) } : {}) }

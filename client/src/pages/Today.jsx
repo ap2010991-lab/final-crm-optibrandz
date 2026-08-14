@@ -77,6 +77,7 @@ export default function Today() {
   const nothingToDo = d
     && !d.money.toRaise.length && !d.money.overdue.length
     && !d.content.due.length
+    && !(d.slipping.shortfalls || []).length
     && !d.slipping.noContentPlanned.length && !d.slipping.renewals.length && !d.slipping.staleLeads.length;
 
   return <div className="space-y-5">
@@ -184,6 +185,32 @@ export default function Today() {
                   <ArrowRight size={16} /> {busy === `content-${item.id}` ? "Saving..." : stage.action}
                 </button>}
               </div>;
+            })}
+          </div>
+        </div>}
+
+        {(d.slipping.shortfalls?.length > 0) && <div className="panel">
+          <h2 className="section-title">Behind on delivery</h2>
+          <p className="mt-1 text-xs font-semibold text-zinc-500">Fewer posts planned this month than you committed to.</p>
+          <div className="mt-3 space-y-2">
+            {d.slipping.shortfalls.map((client) => {
+              const pct = Math.min(100, Math.round((client.planned / client.target) * 100));
+              return <Link key={client.id} to="/content" className="record-card block">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-black">{client.businessName}</div>
+                    <div className="text-xs font-bold text-zinc-500">
+                      {client.posted} posted · {client.planned} planned of {client.target} owed
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-black text-[#be123c]">
+                    {client.target - client.planned} short
+                  </span>
+                </div>
+                <div className="mt-3 h-2 rounded-full bg-slate-100">
+                  <div className="h-2 rounded-full bg-[#ff7a18]" style={{ width: `${pct}%` }} />
+                </div>
+              </Link>;
             })}
           </div>
         </div>}

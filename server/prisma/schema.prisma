@@ -101,6 +101,9 @@ model Client {
   gstNumber     String?
   address       String?
   healthScore   Int               @default(100)
+  // How many posts a month this client is owed. Nullable on purpose: existing clients
+  // keep working with no target until one is set, and nothing is inferred on their behalf.
+  monthlyContentTarget Int?
   status        ClientStatus      @default(ACTIVE)
   onboardedAt   DateTime          @default(now())
   renewalDate   DateTime?
