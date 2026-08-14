@@ -10,7 +10,7 @@
  *     HTTP cache is already the fastest possible path. Intercepting them only adds a hop.
  *   - /api/* is never cached; a stale invoice total is worse than an honest error.
  */
-const VERSION = "ob-crm-v3";
+const VERSION = "ob-crm-v4";
 const SHELL_CACHE = `${VERSION}-shell`;
 const SHELL_URL = "/index.html";
 
@@ -42,27 +42,34 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Serve the cached shell immediately so a home-screen launch paints at once, and
-  // refresh it in the background so the next launch has the latest build. main.jsx
-  // reloads the page when a new service worker takes over, so a deploy still lands.
+  // Network first, cache only as a fallback.
+  //
+  // Serving the cached shell first would be a little faster, but it is not safe here:
+  // the SPA rewrite means a missing /assets/index-<oldhash>.js returns index.html with
+  // HTTP 200 and a text/html content type. A shell cached before a deploy therefore asks
+  // for asset hashes that no longer exist, the browser tries to parse HTML as a module,
+  // and the app white-screens. Fresh HTML always matches the deployed assets.
   event.respondWith(
     caches.open(SHELL_CACHE).then(async (cache) => {
-      const cached = await cache.match(SHELL_URL);
-      const network = fetch(request)
-        .then((response) => {
-          if (response && response.ok) cache.put(SHELL_URL, response.clone());
-          return response;
-        })
-        .catch(() => null);
-
-      if (cached) {
-        event.waitUntil(network);
-        return cached;
+      try {
+        const response = await withTimeout(fetch(request), 3000);
+        if (response && response.ok) cache.put(SHELL_URL, response.clone());
+        return response;
+      } catch {
+        return (await cache.match(SHELL_URL)) || offlineResponse();
       }
-      return (await network) || offlineResponse();
     })
   );
 });
+
+// A phone on a dead cell connection can leave fetch hanging, so fall through to the
+// cached shell rather than showing a spinner indefinitely.
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
+  ]);
+}
 
 function offlineResponse() {
   return new Response(
