@@ -522,6 +522,39 @@ textarea.input { min-height: 84px; }
 .calendar-chip.review { background: #ede9fe; color: #5b21b6; }
 .calendar-chip.rejected { background: #ffe4e6; color: #9f1239; }
 
+/* ---------- post creatives ---------- */
+.post-media {
+  overflow: hidden;
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #f4f1ea;
+}
+.post-media img {
+  display: block;
+  width: 100%;
+  /* Social creatives are usually square or portrait; capping the height stops one tall
+     image pushing every other post off the screen. */
+  max-height: 22rem;
+  object-fit: contain;
+}
+.post-media-empty {
+  display: flex;
+  width: 100%;
+  min-height: 92px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed var(--ob-line);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.7);
+  color: var(--ob-stone);
+  font-size: 13px;
+  font-weight: 800;
+}
+.post-media-empty svg { color: var(--ob-orange); }
+.post-media-empty:disabled { opacity: 0.6; }
+
 .ai-output { border: 1px solid var(--ob-line); border-radius: 14px; background: linear-gradient(180deg, #fffdf7, #fff9ed); color: #2b261f; padding: 14px; overflow-wrap: anywhere; }
 
 /* ---------- login ---------- */

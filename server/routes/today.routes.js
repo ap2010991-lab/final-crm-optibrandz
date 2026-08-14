@@ -64,7 +64,8 @@ router.get("/", asyncRoute(async (req, res) => {
             where: { status: { not: "PUBLISHED" }, scheduledDate: { lt: weekEnd } },
             select: {
               id: true, platform: true, postType: true, status: true, scheduledDate: true, caption: true,
-              client: { select: { id: true, businessName: true } }
+              designBrief: true, mediaUrl: true,
+              client: { select: { id: true, businessName: true, contactPerson: true, phone: true } }
             },
             orderBy: { scheduledDate: "asc" },
             take: 40

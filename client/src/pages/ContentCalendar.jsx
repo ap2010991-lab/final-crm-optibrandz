@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { monthLabel, pretty, toDateInput } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import RecordModal, { ConfirmModal } from "../components/RecordModal";
-import { CONTENT_STAGES, normalizeStage, stageOf } from "../lib/contentStages";
-import { StageChip } from "./Today";
+import { CONTENT_STAGES } from "../lib/contentStages";
+import PostCard from "../components/PostCard";
 import { useToast } from "../lib/useToast";
 
 const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "YOUTUBE", "GMB"];
@@ -85,22 +85,6 @@ export default function ContentCalendar({ readOnly = false }) {
     }
   }
 
-  // One tap moves a post to the next stage. The old screen only had an Approve button and
-  // a status dropdown buried in a modal, which is why all 26 posts stayed on Draft.
-  async function advance(item) {
-    const stage = stageOf(normalizeStage(item.status));
-    if (!stage.next) return;
-    setBusy(true);
-    try {
-      await api(`/calendar/${item.id}`, { method: "PUT", body: JSON.stringify({ status: stage.next }) });
-      notify(`${stageOf(stage.next).label}`);
-      refresh();
-    } catch (error) {
-      notify(error.message, "error");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function deleteItem(item) {
     await api(`/calendar/${item.id}`, { method: "DELETE" });
@@ -147,27 +131,19 @@ export default function ContentCalendar({ readOnly = false }) {
             chronological list and the grid appears from tablet width up. */}
         <div className="space-y-3 lg:hidden">
           {items.length === 0 && <p className="empty-state">No posts planned for {monthLabel(month, year)}.</p>}
-          {items.map((item) => <div key={item.id} className="record-card">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-black">{pretty(item.platform)} · {pretty(item.postType)}</div>
-                <div className="text-sm font-semibold text-zinc-500">
-                  {item.scheduledDate ? new Date(item.scheduledDate).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" }) : "No date"}
-                </div>
-              </div>
-              <StageChip status={item.status} />
-            </div>
-            {item.caption && <p className="mt-2 line-clamp-3 text-sm text-zinc-600">{item.caption}</p>}
-            {!readOnly && <>
-              {stageOf(normalizeStage(item.status)).next && <button className="primary mt-3 w-full" disabled={busy}
-                onClick={() => advance(item)}>
-                <Check size={16} /> {stageOf(normalizeStage(item.status)).action}
-              </button>}
-              <div className="record-card-actions">
-                <button className="table-action" onClick={() => setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}>Edit</button>
-                <button className="danger-action" onClick={() => setDeleting(item)}><Trash2 size={14} /> Remove</button>
-              </div>
-            </>}
+          {items.map((item) => <div key={item.id}>
+            <PostCard
+              post={item}
+              client={clients.find((entry) => entry.id === clientId)}
+              readOnly={readOnly}
+              onChanged={refresh}
+            />
+            {!readOnly && <div className="record-card-actions -mt-2 px-1">
+              <button className="table-action" onClick={() => setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}>
+                Edit caption &amp; brief
+              </button>
+              <button className="danger-action" onClick={() => setDeleting(item)}><Trash2 size={14} /> Remove</button>
+            </div>}
           </div>)}
         </div>
 

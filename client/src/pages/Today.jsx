@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CalendarPlus, CheckCircle2, ChevronRight, IndianRupee, MessageCircle, Receipt } from "lucide-react";
+import { CalendarPlus, ChevronRight, IndianRupee, MessageCircle, Receipt } from "lucide-react";
 import { api, useAuth, PUBLIC_BASE } from "../lib/api";
-import { longDate, money, normalizePhone, pretty, shortDate } from "../lib/format";
-import { CONTENT_STAGES, normalizeStage, stageOf } from "../lib/contentStages";
+import { longDate, money, normalizePhone, shortDate } from "../lib/format";
+import PostCard from "../components/PostCard";
 import { QueryState } from "../components/QueryState";
 import { useToast } from "../lib/useToast";
 
@@ -46,20 +46,6 @@ export default function Today() {
     }
   }
 
-  async function advance(item) {
-    const stage = stageOf(normalizeStage(item.status));
-    if (!stage.next) return;
-    setBusy(`content-${item.id}`);
-    try {
-      await api(`/calendar/${item.id}`, { method: "PUT", body: JSON.stringify({ status: stage.next }) });
-      notify(`${item.client?.businessName || "Post"} → ${stageOf(stage.next).label}`);
-      refresh();
-    } catch (error) {
-      notify(error.message, "error");
-    } finally {
-      setBusy("");
-    }
-  }
 
   function chaseUrl(invoice) {
     const phone = normalizePhone(invoice.clientPhone || invoice.client?.phone);
@@ -163,29 +149,12 @@ export default function Today() {
           </h2>
           <p className="mt-1 text-xs font-semibold text-zinc-500">Scheduled today or this week and not posted yet.</p>
           <div className="mt-3 space-y-2">
-            {d.content.due.map((item) => {
-              const stage = stageOf(normalizeStage(item.status));
-              return <div key={item.id} className="record-card">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-black">{item.client?.businessName || "Client"}</div>
-                    <div className="text-xs font-bold text-zinc-500">
-                      {pretty(item.platform)} · {pretty(item.postType)} ·{" "}
-                      <span className={item.overdue ? "text-[#be123c]" : ""}>{shortDate(item.scheduledDate)}</span>
-                    </div>
-                  </div>
-                  <StageChip status={item.status} />
-                </div>
-                {item.caption && <p className="mt-2 line-clamp-2 text-sm text-zinc-600">{item.caption}</p>}
-                {stage.next && <button
-                  className="primary mt-3 w-full"
-                  onClick={() => advance(item)}
-                  disabled={busy === `content-${item.id}`}
-                >
-                  <ArrowRight size={16} /> {busy === `content-${item.id}` ? "Saving..." : stage.action}
-                </button>}
-              </div>;
-            })}
+            {d.content.due.map((item) => <PostCard
+              key={item.id}
+              post={item}
+              showClientName
+              onChanged={refresh}
+            />)}
           </div>
         </div>}
 
@@ -238,18 +207,4 @@ export default function Today() {
   </div>;
 }
 
-export function StageChip({ status }) {
-  const stage = stageOf(normalizeStage(status));
-  const tone = {
-    DRAFT: "bg-zinc-100 text-zinc-600 border-zinc-200",
-    IN_DESIGN: "bg-blue-100 text-blue-700 border-blue-200",
-    APPROVED: "bg-amber-100 text-amber-800 border-amber-200",
-    PUBLISHED: "bg-emerald-100 text-emerald-700 border-emerald-200"
-  }[stage.value];
-  return <span className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-bold ${tone}`}>
-    {stage.value === "PUBLISHED" && <CheckCircle2 size={12} />}
-    {stage.label}
-  </span>;
-}
 
-export { CONTENT_STAGES };
