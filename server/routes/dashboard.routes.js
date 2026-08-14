@@ -22,15 +22,37 @@ router.get("/", asyncRoute(async (_req, res) => {
   const now = new Date();
   const today = startOfToday();
   const weekAgo = new Date(now.getTime() - 7 * 86400000);
-  const [clients, leads, rawInvoices, tasks, serviceOrders, campaigns, calendarItems, users] = await Promise.all([
-    prisma.client.findMany(),
-    prisma.lead.findMany(),
-    prisma.invoice.findMany(),
-    prisma.task.findMany(),
-    prisma.serviceOrder.findMany(),
-    prisma.campaignLog.findMany(),
-    prisma.contentCalendar.findMany(),
-    prisma.user.findMany()
+  // Every one of these used to be an unrestricted findMany that pulled every column,
+  // including long text fields the dashboard never reads. Selecting only what is
+  // aggregated keeps the response small and the query cheap as the CRM grows.
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const [clients, leads, rawInvoices, tasks, serviceOrders, campaigns, contentInReview, users] = await Promise.all([
+    prisma.client.findMany({
+      select: { id: true, businessName: true, status: true, totalValue: true, advancePaid: true, renewalDate: true }
+    }),
+    prisma.lead.findMany({
+      select: { id: true, status: true, createdAt: true, followUpDate: true }
+    }),
+    prisma.invoice.findMany({
+      select: { id: true, invoiceNumber: true, status: true, totalAmount: true, paidAmount: true, dueDate: true, createdAt: true },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.task.findMany({
+      select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedToId: true }
+    }),
+    prisma.serviceOrder.findMany({
+      select: { serviceType: true, status: true, monthlyValue: true }
+    }),
+    prisma.campaignLog.findMany({
+      where: { createdAt: { gte: sixMonthsAgo } },
+      select: { platform: true, adSpend: true, leadsGenerated: true, cpl: true },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.contentCalendar.count({ where: { status: "REVIEW" } }),
+    prisma.user.findMany({
+      where: { isActive: true, role: { not: "CLIENT" } },
+      select: { id: true, name: true, role: true }
+    })
   ]);
   const invoices = rawInvoices.map((invoice) => ({ ...invoice, status: effectiveStatus(invoice, today) }));
 
@@ -86,7 +108,7 @@ router.get("/", asyncRoute(async (_req, res) => {
     invoicedTotal: invoiced,
     collectedTotal: collected,
     activeServicesCount: activeOrders.length,
-    contentInReview: calendarItems.filter((item) => item.status === "REVIEW").length,
+    contentInReview,
     campaignLeads: campaigns.reduce((sum, item) => sum + Number(item.leadsGenerated || 0), 0),
     newLeadsThisWeek: leads.filter((lead) => lead.status === "NEW" && (!lead.createdAt || new Date(lead.createdAt) >= weekAgo)).length,
     conversionRate,
@@ -103,7 +125,7 @@ router.get("/", asyncRoute(async (_req, res) => {
     activeClientsByService: Object.entries(activeOrders.reduce((acc, order) => ({ ...acc, [order.serviceType]: (acc[order.serviceType] || 0) + 1 }), {})).map(([service, count]) => ({ service, count })),
     invoiceStatusChart: invoiceStatuses.map((status) => ({ status, count: invoices.filter((invoice) => invoice.status === status).length })),
     taskStatusChart: taskStatuses.map((status) => ({ status, count: tasks.filter((task) => task.status === status).length })),
-    teamLoad: users.filter((user) => user.role !== "CLIENT" && user.isActive).map((user) => {
+    teamLoad: users.map((user) => {
       const mine = tasks.filter((task) => task.assignedToId === user.id);
       return { name: user.name.split(" ")[0], total: mine.length, overdue: mine.filter((task) => new Date(task.dueDate) < today && task.status !== "DONE").length };
     }),

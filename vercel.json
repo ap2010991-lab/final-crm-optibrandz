@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": [
+    "sin1"
+  ],
   "installCommand": "npm install --include=dev && npm install --include=dev --prefix client && npm install --include=dev --prefix server && npm run db:generate --prefix server",
   "buildCommand": "NODE_ENV=production npm run build --prefix client",
   "outputDirectory": "client/dist",
