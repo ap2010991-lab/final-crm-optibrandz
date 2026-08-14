@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 
 // Each screen is a separate chunk so opening the CRM on mobile data downloads the shell
 // and one page, not the charting library and every other section as well.
+const Today = lazy(() => import("./pages/Today"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Leads = lazy(() => import("./pages/Leads"));
 const LeadDetail = lazy(() => import("./pages/LeadDetail"));
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/portal/login" element={<Login portal />} />
 
+            <Route path="/today" element={<RequireAuth permission="dashboard"><Today /></RequireAuth>} />
             <Route path="/dashboard" element={<RequireAuth permission="dashboard"><Dashboard /></RequireAuth>} />
             <Route path="/ai" element={<RequireAuth permission="ai"><AIAgent /></RequireAuth>} />
             <Route path="/leads" element={<RequireAuth permission="leads"><Leads /></RequireAuth>} />

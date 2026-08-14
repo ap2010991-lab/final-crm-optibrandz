@@ -99,6 +99,75 @@ router.get("/", asyncRoute(async (req, res) => {
   res.json({ data });
 }));
 
+const monthBounds = (now = new Date()) => ({
+  start: new Date(now.getFullYear(), now.getMonth(), 1),
+  end: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+});
+
+// Billing here is fixed monthly retainers on roughly the same date, so "who needs an
+// invoice" is simply: an active client whose live services add up to more than zero and
+// who has no invoice dated in the current month. Deriving it means no billing-run table
+// and no way for the two to disagree — and it makes pressing the button twice harmless,
+// because the first press removes those clients from the list.
+async function retainerClientsDue() {
+  const { start, end } = monthBounds();
+  const [clients, invoiced] = await Promise.all([
+    prisma.client.findMany({
+      where: { status: { in: ["ACTIVE", "ONBOARDING"] } },
+      select: {
+        id: true, businessName: true, phone: true,
+        services: { where: { status: "ACTIVE" }, select: { monthlyValue: true, serviceType: true } }
+      },
+      orderBy: { businessName: "asc" }
+    }),
+    prisma.invoice.findMany({ where: { createdAt: { gte: start, lt: end } }, select: { clientId: true } })
+  ]);
+  const already = new Set(invoiced.map((invoice) => invoice.clientId));
+  return clients
+    .map((client) => ({
+      id: client.id,
+      businessName: client.businessName,
+      phone: client.phone,
+      amount: round(client.services.reduce((sum, service) => sum + Number(service.monthlyValue || 0), 0)),
+      services: client.services.map((service) => service.serviceType)
+    }))
+    .filter((client) => client.amount > 0 && !already.has(client.id));
+}
+
+router.get("/run", asyncRoute(async (_req, res) => {
+  const due = await retainerClientsDue();
+  res.json({ data: due, total: round(due.reduce((sum, client) => sum + client.amount, 0)) });
+}));
+
+router.post("/run", asyncRoute(async (req, res) => {
+  const { dueInDays = 7 } = z.object({ dueInDays: z.number().int().min(0).max(90).optional() }).parse(req.body || {});
+  const due = await retainerClientsDue();
+  if (!due.length) return res.json({ data: [], created: 0, message: "Every retainer client is already invoiced this month." });
+
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + dueInDays);
+  const month = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+  // Created one at a time on purpose: invoice numbers must stay unique and gapless, and
+  // createInvoiceWithNumber retries against the highest number issued.
+  const created = [];
+  for (const client of due) {
+    created.push(await createInvoiceWithNumber({
+      clientId: client.id,
+      clientPhone: client.phone,
+      lineItems: [{ description: `Monthly retainer — ${month}`, amount: client.amount }],
+      amount: client.amount,
+      gstAmount: 0,
+      totalAmount: client.amount,
+      paidAmount: 0,
+      status: "PENDING",
+      dueDate,
+      paidAt: null
+    }));
+  }
+  res.status(201).json({ data: created, created: created.length });
+}));
+
 router.get("/revenue", asyncRoute(async (_req, res) => {
   const invoices = await prisma.invoice.findMany({ orderBy: { createdAt: "asc" } });
   const data = invoices.reduce((acc, invoice) => {

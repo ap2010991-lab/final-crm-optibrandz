@@ -1,5 +1,4 @@
 const prisma = require("../db/prisma");
-const { serviceTaskDefaults } = require("./serviceDefaults");
 
 function normalizeServices(services = []) {
   return [...new Set(services.map((item) => String(item).trim().toUpperCase().replace(/[\s-]+/g, "_")).filter(Boolean))];
@@ -46,7 +45,6 @@ async function setClientMrr(clientId, monthlyRetainer, db = prisma) {
 async function syncClientServices(clientId, services = [], monthlyRetainer, db = prisma) {
   const selected = normalizeServices(services);
   const currentOrders = await db.serviceOrder.findMany({ where: { clientId } });
-  const assigneeId = await defaultAssigneeId(db);
   const output = [];
 
   for (const serviceType of selected) {
@@ -65,19 +63,11 @@ async function syncClientServices(clientId, services = [], monthlyRetainer, db =
           deliverables: {}
         }
       });
+      // Adding a service used to silently create a default checklist of tasks. Across 29
+      // services that produced 87 tasks nobody had asked for, every one still Pending and
+      // a third already overdue — noise that made the real task list worthless. Tasks are
+      // now only ever what someone typed.
       output.push(order);
-      if (assigneeId) {
-        await db.task.createMany({
-          data: (serviceTaskDefaults[serviceType] || ["Monthly checklist"]).map((title, index) => ({
-            title,
-            serviceOrderId: order.id,
-            assignedToId: assigneeId,
-            status: "PENDING",
-            priority: "MEDIUM",
-            dueDate: new Date(Date.now() + (index + 2) * 86400000)
-          }))
-        });
-      }
     }
   }
 

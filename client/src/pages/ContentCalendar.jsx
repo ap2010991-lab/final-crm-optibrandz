@@ -1,22 +1,22 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { api, useAuth } from "../lib/api";
+import { api } from "../lib/api";
 import { monthLabel, pretty, toDateInput } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import RecordModal, { ConfirmModal } from "../components/RecordModal";
-import Badge from "../components/Badge";
+import { CONTENT_STAGES, normalizeStage, stageOf } from "../lib/contentStages";
+import { StageChip } from "./Today";
 import { useToast } from "../lib/useToast";
 
 const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "YOUTUBE", "GMB"];
 const POST_TYPES = ["STATIC", "REEL", "CAROUSEL", "STORY", "BLOG"];
-const STATUSES = ["DRAFT", "IN_DESIGN", "REVIEW", "APPROVED", "REJECTED", "PUBLISHED"];
+const STATUSES = CONTENT_STAGES.map((stage) => ({ value: stage.value, label: stage.label }));
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function ContentCalendar({ readOnly = false }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
-  const { user } = useAuth();
   const today = new Date();
 
   // The client id used to be hard-coded to the demo record "c-1", so on a real database
@@ -42,7 +42,6 @@ export default function ContentCalendar({ readOnly = false }) {
   const items = useMemo(() => query.data?.data || [], [query.data]);
 
   const grid = useMemo(() => buildMonthGrid(month, year, items), [month, year, items]);
-  const canApprove = ["OWNER", "ACCOUNT_MANAGER", "CLIENT"].includes(user?.role);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["calendar"] });
@@ -86,13 +85,20 @@ export default function ContentCalendar({ readOnly = false }) {
     }
   }
 
-  async function approve(item) {
+  // One tap moves a post to the next stage. The old screen only had an Approve button and
+  // a status dropdown buried in a modal, which is why all 26 posts stayed on Draft.
+  async function advance(item) {
+    const stage = stageOf(normalizeStage(item.status));
+    if (!stage.next) return;
+    setBusy(true);
     try {
-      await api(`/calendar/${item.id}/approve`, { method: "PUT" });
-      notify("Post approved.");
+      await api(`/calendar/${item.id}`, { method: "PUT", body: JSON.stringify({ status: stage.next }) });
+      notify(`${stageOf(stage.next).label}`);
       refresh();
     } catch (error) {
       notify(error.message, "error");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -149,14 +155,19 @@ export default function ContentCalendar({ readOnly = false }) {
                   {item.scheduledDate ? new Date(item.scheduledDate).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" }) : "No date"}
                 </div>
               </div>
-              <Badge tone={item.status}>{pretty(item.status)}</Badge>
+              <StageChip status={item.status} />
             </div>
             {item.caption && <p className="mt-2 line-clamp-3 text-sm text-zinc-600">{item.caption}</p>}
-            {!readOnly && <div className="record-card-actions">
-              <button className="table-action" onClick={() => setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}>Edit</button>
-              {canApprove && item.status !== "APPROVED" && <button className="table-action" onClick={() => approve(item)}><Check size={14} /> Approve</button>}
-              <button className="danger-action" onClick={() => setDeleting(item)}><Trash2 size={14} /> Remove</button>
-            </div>}
+            {!readOnly && <>
+              {stageOf(normalizeStage(item.status)).next && <button className="primary mt-3 w-full" disabled={busy}
+                onClick={() => advance(item)}>
+                <Check size={16} /> {stageOf(normalizeStage(item.status)).action}
+              </button>}
+              <div className="record-card-actions">
+                <button className="table-action" onClick={() => setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}>Edit</button>
+                <button className="danger-action" onClick={() => setDeleting(item)}><Trash2 size={14} /> Remove</button>
+              </div>
+            </>}
           </div>)}
         </div>
 

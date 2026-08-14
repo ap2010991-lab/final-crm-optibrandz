@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, LogOut, MoreHorizontal, Search as SearchIcon, X } from "lucide-react";
 import { api, useAuth } from "../lib/api";
-import { PRIMARY_MOBILE_KEYS, isActivePath, visibleNav } from "../lib/nav";
+import { PRIMARY_MOBILE_HREFS, isActivePath, visibleNav } from "../lib/nav";
 import { initials, pretty } from "../lib/format";
 import BrandLogo from "./BrandLogo";
 import SearchBox from "./SearchBox";
@@ -22,8 +22,11 @@ export default function Shell({ children }) {
 
   // On a phone the bar holds four fixed tabs plus More. Everything the user has access
   // to is reachable from More, so no section is hidden on mobile any more.
-  const primary = allowed.filter((item) => PRIMARY_MOBILE_KEYS.includes(item.key)).slice(0, 4);
-  const overflow = allowed.filter((item) => !primary.some((tab) => tab.key === item.key));
+  const primary = PRIMARY_MOBILE_HREFS
+    .map((href) => allowed.find((item) => item.href === href))
+    .filter(Boolean)
+    .slice(0, 4);
+  const overflow = allowed.filter((item) => !primary.some((tab) => tab.href === item.href));
 
   const { data } = useQuery({
     queryKey: ["notifications"],

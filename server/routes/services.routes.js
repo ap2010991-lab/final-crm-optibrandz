@@ -3,8 +3,6 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
-const { serviceTaskDefaults } = require("../utils/serviceDefaults");
-const { defaultAssigneeId } = require("../utils/syncClientServices");
 
 const router = express.Router();
 
@@ -35,19 +33,6 @@ router.post("/", asyncRoute(async (req, res) => {
       deliverables: body.deliverables || {}
     }
   });
-  const assigneeId = await defaultAssigneeId();
-  if (assigneeId) {
-    await prisma.task.createMany({
-      data: (serviceTaskDefaults[body.serviceType] || ["Monthly checklist"]).map((title, index) => ({
-        title,
-        serviceOrderId: order.id,
-        assignedToId: assigneeId,
-        status: "PENDING",
-        priority: "MEDIUM",
-        dueDate: new Date(Date.now() + (index + 2) * 86400000)
-      }))
-    });
-  }
   res.status(201).json({ data: order });
 }));
 
