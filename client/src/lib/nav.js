@@ -1,4 +1,4 @@
-import { Bot, BriefcaseBusiness, CalendarDays, CircleDollarSign, ClipboardList, FileText, LayoutDashboard, Megaphone, Settings, Sparkles, Sun, Users } from "lucide-react";
+import { Bot, BriefcaseBusiness, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardList, FileText, LayoutDashboard, Megaphone, Settings, Sparkles, Sun, Users } from "lucide-react";
 
 // `key` is the permission name checked on both the client and the server.
 export const navItems = [
@@ -8,6 +8,7 @@ export const navItems = [
   { label: "Invoices", short: "Invoices", href: "/invoices", icon: CircleDollarSign, key: "invoices" },
   { label: "AI Agent", short: "AI", href: "/ai", icon: Bot, key: "ai" },
   { label: "Services & Tasks", short: "Tasks", href: "/services", icon: ClipboardList, key: "services" },
+  { label: "Schedule", short: "Schedule", href: "/schedule", icon: CalendarCheck, key: "content" },
   { label: "Content", short: "Content", href: "/content", icon: CalendarDays, key: "content" },
   { label: "Campaigns", short: "Campaigns", href: "/campaigns", icon: Sparkles, key: "campaigns" },
   { label: "Reports", short: "Reports", href: "/reports", icon: FileText, key: "reports" },
@@ -22,7 +23,7 @@ export const navItems = [
 //
 // Matched on href rather than permission key: Today and Dashboard deliberately share the
 // "dashboard" permission, so keying on that would pin both and push Invoices out.
-export const PRIMARY_MOBILE_HREFS = ["/today", "/clients", "/content", "/invoices"];
+export const PRIMARY_MOBILE_HREFS = ["/today", "/schedule", "/clients", "/invoices"];
 
 export function canAccess(user, permission) {
   if (!user) return false;

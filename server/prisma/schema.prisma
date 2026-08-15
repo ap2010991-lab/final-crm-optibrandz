@@ -371,6 +371,23 @@ model Notification {
   @@index([userId, isRead, createdAt])
 }
 
+// Post creatives, stored in the database.
+//
+// Supabase Storage is the nicer home for these, but it needs a service-role key that was
+// never configured, so uploads simply failed. The app already holds a Postgres connection,
+// so the bytes live here instead and the feature works with no extra credentials. Images
+// are downscaled client-side first, so a typical creative is a couple of hundred KB.
+model MediaAsset {
+  id        String   @id @default(uuid())
+  contentId String?
+  mimeType  String
+  bytes     Bytes
+  byteSize  Int
+  createdAt DateTime @default(now())
+
+  @@index([contentId])
+}
+
 model Settings {
   id           String   @id @default(uuid())
   agencyName   String   @default("OptiBrandz")

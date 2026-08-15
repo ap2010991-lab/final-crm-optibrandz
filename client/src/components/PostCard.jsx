@@ -82,8 +82,11 @@ export default function PostCard({ post, client, onChanged, readOnly = false, sh
     </div>
 
     {post.mediaUrl
+      // No loading="lazy": with it the creative stayed at 0x0 even once scrolled into
+      // view, while the same URL loaded fine when requested directly. A handful of small
+      // images per screen is not worth an optimisation that can leave them blank.
       ? <a href={post.mediaUrl} target="_blank" rel="noopener noreferrer" className="post-media mt-3 block">
-          <img src={post.mediaUrl} alt={`${pretty(post.platform)} creative`} loading="lazy" />
+          <img src={post.mediaUrl} alt={`${pretty(post.platform)} creative`} decoding="async" />
         </a>
       : !readOnly && <button type="button" className="post-media-empty mt-3" disabled={busy === "upload"}
           onClick={() => fileRef.current?.click()}>

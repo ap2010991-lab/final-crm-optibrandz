@@ -18,6 +18,7 @@ const LeadDetail = lazy(() => import("./pages/LeadDetail"));
 const Clients = lazy(() => import("./pages/Clients"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail"));
 const Services = lazy(() => import("./pages/Services"));
+const Schedule = lazy(() => import("./pages/Schedule"));
 const ContentCalendar = lazy(() => import("./pages/ContentCalendar"));
 const Invoices = lazy(() => import("./pages/Invoices"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/clients/:id" element={<RequireAuth permission="clients"><ClientDetail /></RequireAuth>} />
             <Route path="/services" element={<RequireAuth permission="services"><Services /></RequireAuth>} />
             <Route path="/tasks" element={<Navigate to="/services" replace />} />
+            <Route path="/schedule" element={<RequireAuth permission="content"><Schedule /></RequireAuth>} />
             <Route path="/content" element={<RequireAuth permission="content"><ContentCalendar /></RequireAuth>} />
             <Route path="/invoices" element={<RequireAuth permission="invoices"><Invoices /></RequireAuth>} />
             <Route path="/campaigns" element={<RequireAuth permission="campaigns"><Campaigns /></RequireAuth>} />

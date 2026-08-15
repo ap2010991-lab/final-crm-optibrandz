@@ -4,7 +4,7 @@ const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { onlyProvided } = require("../utils/onlyProvided");
-const { uploadPostImage, removePostImage, isConfigured } = require("../utils/mediaStorage");
+const { uploadPostImage, removePostImage, isConfigured, backendName } = require("../utils/mediaStorage");
 
 const multer = require("multer");
 
@@ -30,13 +30,25 @@ const calendarSchema = z.object({
 });
 
 router.get("/", asyncRoute(async (req, res) => {
+  // Filtering on scheduledDate rather than the month/year columns when a range is asked
+  // for, because those columns record which plan a post belongs to, which is not always
+  // the month it actually goes out in.
+  const { month, year, clientId, status } = req.query;
+  const range = month && year
+    ? { gte: new Date(Number(year), Number(month) - 1, 1), lt: new Date(Number(year), Number(month), 1) }
+    : null;
+
   const data = await prisma.contentCalendar.findMany({
     where: {
-      ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {}),
-      ...(req.query.month ? { month: Number(req.query.month) } : {}),
-      ...(req.query.year ? { year: Number(req.query.year) } : {})
+      ...(clientId ? { clientId: String(clientId) } : {}),
+      ...(status ? { status: String(status) } : {}),
+      ...(range
+        ? { OR: [{ scheduledDate: range }, { scheduledDate: null, month: Number(month), year: Number(year) }] }
+        : {})
     },
-    orderBy: { scheduledDate: "asc" }
+    // The schedule view spans every client, so it needs the name to show against each post.
+    include: { client: { select: { id: true, businessName: true, phone: true, contactPerson: true } } },
+    orderBy: [{ scheduledDate: "asc" }, { createdAt: "asc" }]
   });
   res.json({ data });
 }));
@@ -141,7 +153,7 @@ router.post("/:id/media", upload.single("image"), asyncRoute(async (req, res) =>
   res.status(201).json({ data: item });
 }));
 
-router.get("/media/status", (_req, res) => res.json({ data: { configured: isConfigured() } }));
+router.get("/media/status", (_req, res) => res.json({ data: { configured: isConfigured(), backend: backendName() } }));
 
 router.delete("/:id", asyncRoute(async (req, res) => {
   const current = await prisma.contentCalendar.findUnique({ where: { id: req.params.id } });
