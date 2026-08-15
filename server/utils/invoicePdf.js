@@ -77,8 +77,9 @@ async function streamInvoicePdf(invoice, res) {
       .text(metaLine, brandX, headY, { width: brandWidth, lineBreak: false });
   }
 
+  const isTaxInvoice = Number(invoice.gstAmount || 0) > 0 || Boolean(agency.gstNumber);
   doc.font(fonts.bold).fontSize(19).fillColor("#FFFFFF")
-    .text("TAX INVOICE", right - 220, 32, { width: 220, align: "right", characterSpacing: 1.2 });
+    .text(isTaxInvoice ? "TAX INVOICE" : "INVOICE", right - 220, 32, { width: 220, align: "right", characterSpacing: 1.2 });
   doc.font(fonts.semibold).fontSize(10).fillColor(COLORS.yellow)
     .text(invoice.invoiceNumber || "", right - 220, 58, { width: 220, align: "right", lineBreak: false });
   doc.font(fonts.regular).fontSize(8.5).fillColor("#B8B2A9")
@@ -201,7 +202,7 @@ async function streamInvoicePdf(invoice, res) {
   };
 
   totalsRow("Subtotal", money(subtotal));
-  totalsRow("GST", money(gst));
+  if (gst > 0) totalsRow("GST", money(gst));
 
   rule(doc, y + 2);
   y += 10;

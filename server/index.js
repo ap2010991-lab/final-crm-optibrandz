@@ -45,6 +45,7 @@ app.use("/api", (_req, res, next) => {
 app.get("/api/health", (_req, res) => res.json({ ok: true, name: "OptiBrandz CRM API" }));
 app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/public/invoices", require("./routes/public-invoices.routes"));
+app.use("/api/public/reports", require("./routes/public-reports.routes"));
 app.use("/api/cron", require("./routes/cron.routes"));
 app.use("/api/settings", verifyToken, require("./routes/settings.routes"));
 app.use("/api/today", verifyToken, requirePermission("dashboard"), require("./routes/today.routes"));

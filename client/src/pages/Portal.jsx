@@ -37,7 +37,7 @@ export default function Portal() {
                 <h3 className="font-black">{monthLabel(report.month, report.year)}</h3>
                 <p className="text-xs font-bold text-zinc-500">Published {longDate(report.createdAt)}</p>
               </div>
-              <a className="table-action" href={`${PUBLIC_BASE}/api/reports/${report.id}/pdf`} target="_blank" rel="noopener noreferrer">
+              <a className="table-action" href={`${PUBLIC_BASE}/api/public/reports/${report.id}/pdf`} target="_blank" rel="noopener noreferrer">
                 <FileText size={14} /> PDF
               </a>
             </div>

@@ -71,7 +71,7 @@ export default function Reports() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a className="table-action" href={`${PUBLIC_BASE}/api/reports/${report.id}/pdf`} target="_blank" rel="noopener noreferrer">
+              <a className="table-action" href={`${PUBLIC_BASE}/api/public/reports/${report.id}/pdf`} target="_blank" rel="noopener noreferrer">
                 <FileText size={14} /> PDF
               </a>
               <button className="danger-action" onClick={() => setDeleting(report)}><Trash2 size={14} /> Delete</button>

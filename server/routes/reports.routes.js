@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
 const { streamReportPdf } = require("../utils/reportPdf");
+const { buildReportStats } = require("../utils/reportStats");
 
 const router = express.Router();
 
@@ -81,9 +82,9 @@ router.post("/generate", asyncRoute(async (req, res) => {
   const report = await prisma.report.create({
     data: { clientId: body.clientId, month: body.month, year: body.year, summary }
   });
-  await prisma.report.update({ where: { id: report.id }, data: { pdfUrl: `/api/reports/${report.id}/pdf` } });
+  await prisma.report.update({ where: { id: report.id }, data: { pdfUrl: `/api/public/reports/${report.id}/pdf` } });
 
-  res.status(201).json({ data: { ...report, pdfUrl: `/api/reports/${report.id}/pdf`, campaignCount: campaigns.length } });
+  res.status(201).json({ data: { ...report, pdfUrl: `/api/public/reports/${report.id}/pdf`, campaignCount: campaigns.length } });
 }));
 
 router.get("/", asyncRoute(async (req, res) => {
@@ -105,42 +106,7 @@ router.get("/:id/pdf", asyncRoute(async (req, res) => {
   });
   if (!report) return res.status(404).json({ message: "Report not found" });
 
-  // Recomputed at render time so a downloaded report always matches the current records
-  // rather than a snapshot of whatever the numbers were when it was generated.
-  const monthStart = new Date(report.year, report.month - 1, 1);
-  const monthEnd = new Date(report.year, report.month, 1);
-  const [posted, campaigns, services] = await Promise.all([
-    prisma.contentCalendar.findMany({
-      where: { clientId: report.clientId, status: "PUBLISHED", scheduledDate: { gte: monthStart, lt: monthEnd } },
-      select: { platform: true, postType: true }
-    }),
-    prisma.campaignLog.findMany({
-      where: { clientId: report.clientId, month: report.month, year: report.year },
-      select: { adSpend: true, leadsGenerated: true }
-    }),
-    prisma.serviceOrder.count({ where: { clientId: report.clientId, status: "ACTIVE" } })
-  ]);
-
-  const adSpend = campaigns.reduce((sum, row) => sum + Number(row.adSpend || 0), 0);
-  const leads = campaigns.reduce((sum, row) => sum + Number(row.leadsGenerated || 0), 0);
-  const target = Number(report.client?.monthlyContentTarget) || 0;
-
-  const countBy = (rows, key) => rows.reduce((acc, row) => ({ ...acc, [row[key]]: (acc[row[key]] || 0) + 1 }), {});
-  const toRows = (counts) => Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, value]) => ({ label: String(label).toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), value }));
-
-  const stats = {
-    tiles: [
-      { label: target ? `Posts of ${target}` : "Posts published", value: posted.length },
-      { label: "Active services", value: services },
-      leads ? { label: "Leads generated", value: leads } : null,
-      adSpend ? { label: "Ad spend", value: `₹${Math.round(adSpend).toLocaleString("en-IN")}` } : null
-    ].filter(Boolean),
-    breakdown: [...toRows(countBy(posted, "platform")), ...toRows(countBy(posted, "postType"))]
-  };
-
-  await streamReportPdf(report, stats, res);
+  await streamReportPdf(report, await buildReportStats(report), res);
 }));
 
 router.delete("/:id", asyncRoute(async (req, res) => {
