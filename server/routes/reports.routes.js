@@ -1,13 +1,12 @@
 const express = require("express");
-const PDFDocument = require("pdfkit");
 const { z } = require("zod");
 const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
-const { getAgencySettings } = require("../utils/agencySettings");
+const { streamReportPdf } = require("../utils/reportPdf");
 
 const router = express.Router();
 
-const inr = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
+const inr = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 const monthName = (month, year) => new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
 function clientScope(user) {
@@ -105,19 +104,43 @@ router.get("/:id/pdf", asyncRoute(async (req, res) => {
     include: { client: true }
   });
   if (!report) return res.status(404).json({ message: "Report not found" });
-  const agency = await getAgencySettings();
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `inline; filename="report-${report.month}-${report.year}.pdf"`);
-  const doc = new PDFDocument({ margin: 48, size: "A4" });
-  doc.on("error", () => res.end());
-  doc.pipe(res);
-  doc.fontSize(20).text(agency.agencyName || "OptiBrandz");
-  doc.fontSize(10).fillColor("#555").text([agency.email, agency.website].filter(Boolean).join("  |  "));
-  doc.moveDown(1).fillColor("#000").fontSize(17).text(`${monthName(report.month, report.year)} performance report`);
-  doc.moveDown(0.3).fontSize(12).text(report.client?.businessName || "Client");
-  doc.moveDown(1).fontSize(11).fillColor("#222").text(report.summary || "", { align: "left", lineGap: 3 });
-  doc.end();
+  // Recomputed at render time so a downloaded report always matches the current records
+  // rather than a snapshot of whatever the numbers were when it was generated.
+  const monthStart = new Date(report.year, report.month - 1, 1);
+  const monthEnd = new Date(report.year, report.month, 1);
+  const [posted, campaigns, services] = await Promise.all([
+    prisma.contentCalendar.findMany({
+      where: { clientId: report.clientId, status: "PUBLISHED", scheduledDate: { gte: monthStart, lt: monthEnd } },
+      select: { platform: true, postType: true }
+    }),
+    prisma.campaignLog.findMany({
+      where: { clientId: report.clientId, month: report.month, year: report.year },
+      select: { adSpend: true, leadsGenerated: true }
+    }),
+    prisma.serviceOrder.count({ where: { clientId: report.clientId, status: "ACTIVE" } })
+  ]);
+
+  const adSpend = campaigns.reduce((sum, row) => sum + Number(row.adSpend || 0), 0);
+  const leads = campaigns.reduce((sum, row) => sum + Number(row.leadsGenerated || 0), 0);
+  const target = Number(report.client?.monthlyContentTarget) || 0;
+
+  const countBy = (rows, key) => rows.reduce((acc, row) => ({ ...acc, [row[key]]: (acc[row[key]] || 0) + 1 }), {});
+  const toRows = (counts) => Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value]) => ({ label: String(label).toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), value }));
+
+  const stats = {
+    tiles: [
+      { label: target ? `Posts of ${target}` : "Posts published", value: posted.length },
+      { label: "Active services", value: services },
+      leads ? { label: "Leads generated", value: leads } : null,
+      adSpend ? { label: "Ad spend", value: `₹${Math.round(adSpend).toLocaleString("en-IN")}` } : null
+    ].filter(Boolean),
+    breakdown: [...toRows(countBy(posted, "platform")), ...toRows(countBy(posted, "postType"))]
+  };
+
+  await streamReportPdf(report, stats, res);
 }));
 
 router.delete("/:id", asyncRoute(async (req, res) => {
