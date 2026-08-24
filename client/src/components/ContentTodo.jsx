@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Eraser, ListTodo, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, Check, Eraser, ListTodo, Pencil, Plus, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
-import { shortDate, toDateInput } from "../lib/format";
+import { fromDateInput, shortDate, toDateInput } from "../lib/format";
+import { isOverdue, startOfToday, TASK_TYPES, taskTypeLabel } from "../lib/contentTasks";
 import { QueryState } from "./QueryState";
 import RecordModal, { ConfirmModal } from "./RecordModal";
 import { useToast } from "../lib/useToast";
@@ -16,23 +17,6 @@ import { useToast } from "../lib/useToast";
  * through it rather than vanishing.
  */
 
-const TASK_TYPES = [
-  { value: "REEL", label: "Reel" },
-  { value: "POST", label: "Post" },
-  { value: "STORY", label: "Story" },
-  { value: "CAROUSEL", label: "Carousel" },
-  { value: "VIDEO", label: "Video" },
-  { value: "OTHER", label: "Other" }
-];
-
-const typeLabel = (value) => TASK_TYPES.find((type) => type.value === value)?.label || "Post";
-
-const startOfToday = () => {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
-};
-
 export default function ContentTodo({ clientId, clientName }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
@@ -40,6 +24,9 @@ export default function ContentTodo({ clientId, clientName }) {
 
   const [draftType, setDraftType] = useState("REEL");
   const [draftTitle, setDraftTitle] = useState("");
+  // Kept after each add rather than cleared: a planning session is usually "everything
+  // going out on the 26th", so re-picking the same date per post would be busywork.
+  const [draftDate, setDraftDate] = useState("");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -88,7 +75,7 @@ export default function ContentTodo({ clientId, clientName }) {
     try {
       await api("/content-tasks", {
         method: "POST",
-        body: JSON.stringify({ clientId, title, type: draftType })
+        body: JSON.stringify({ clientId, title, type: draftType, dueDate: fromDateInput(draftDate) })
       });
       setDraftTitle("");
       refresh();
@@ -122,14 +109,14 @@ export default function ContentTodo({ clientId, clientName }) {
   const fields = [
     { name: "title", label: "Task", required: true, wide: true, placeholder: "e.g. Diwali offer reel" },
     { name: "type", label: "Kind", options: TASK_TYPES, required: true },
-    { name: "dueDate", label: "Due date", kind: "date", type: "date" },
+    { name: "dueDate", label: "Date it goes out", kind: "date", type: "date" },
     { name: "notes", label: "Notes", rows: 3, placeholder: "Script idea, reference link, who is shooting it" }
   ];
 
   const today = startOfToday();
 
   const row = (task) => {
-    const overdue = !task.isDone && task.dueDate && new Date(task.dueDate) < today;
+    const overdue = isOverdue(task, today);
     return <li key={task.id} className={`todo-row ${task.isDone ? "done" : ""}`}>
       <button
         type="button"
@@ -145,9 +132,9 @@ export default function ContentTodo({ clientId, clientName }) {
       <div className="todo-body">
         <p className="todo-title">{task.title}</p>
         <div className="todo-meta">
-          <span className={`todo-type ${task.type.toLowerCase()}`}>{typeLabel(task.type)}</span>
+          <span className={`todo-type ${task.type.toLowerCase()}`}>{taskTypeLabel(task.type)}</span>
           {task.dueDate && !task.isDone && <span className={overdue ? "todo-overdue" : ""}>
-            {overdue ? "Overdue " : "Due "}{shortDate(task.dueDate)}
+            {overdue ? `Overdue ${shortDate(task.dueDate)}` : shortDate(task.dueDate)}
           </span>}
           {task.isDone && task.completedAt && <span>Posted {shortDate(task.completedAt)}</span>}
         </div>
@@ -182,15 +169,34 @@ export default function ContentTodo({ clientId, clientName }) {
           onClick={() => setDraftType(type.value)}
         >{type.label}</button>)}
       </div>
+      <input
+        ref={titleRef}
+        className="input"
+        value={draftTitle}
+        maxLength={200}
+        placeholder={`New ${taskTypeLabel(draftType).toLowerCase()} for ${clientName || "this client"}`}
+        onChange={(event) => setDraftTitle(event.target.value)}
+      />
+      {/* The date is its own row so a 375px phone never squeezes the title field down to
+          a few characters. Leaving it blank is fine — the task simply has no date yet and
+          stays off the calendar until it gets one. */}
       <div className="todo-add-row">
-        <input
-          ref={titleRef}
-          className="input"
-          value={draftTitle}
-          maxLength={200}
-          placeholder={`New ${typeLabel(draftType).toLowerCase()} for ${clientName || "this client"}`}
-          onChange={(event) => setDraftTitle(event.target.value)}
-        />
+        <label className="todo-add-date">
+          <CalendarDays size={15} />
+          <input
+            type="date"
+            className="input"
+            value={draftDate}
+            aria-label="Date this goes out"
+            onChange={(event) => setDraftDate(event.target.value)}
+          />
+          {draftDate && <button
+            type="button"
+            className="todo-add-date-clear"
+            aria-label="Clear the date"
+            onClick={() => setDraftDate("")}
+          ><X size={14} /></button>}
+        </label>
         <button className="primary" disabled={adding || !draftTitle.trim()}>
           <Plus size={16} /> {adding ? "Adding..." : "Add"}
         </button>

@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ListTodo, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { monthLabel, pretty, toDateInput } from "../lib/format";
+import { monthLabel, pretty, shortDate, toDateInput } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import RecordModal, { ConfirmModal } from "../components/RecordModal";
 import { CONTENT_STAGES } from "../lib/contentStages";
+import { tasksByDay, taskTypeLabel } from "../lib/contentTasks";
 import PostCard from "../components/PostCard";
 import ContentTodo from "../components/ContentTodo";
 import { useToast } from "../lib/useToast";
@@ -59,7 +60,17 @@ export default function ContentCalendar({ readOnly = false }) {
   });
   const items = useMemo(() => query.data?.data || [], [query.data]);
 
-  const grid = useMemo(() => buildMonthGrid(month, year, items), [month, year, items]);
+  // Same query key the To-do list uses, so the two tabs share one cache entry and ticking
+  // a task off there is reflected here without a second round trip.
+  const tasksQuery = useQuery({
+    queryKey: ["content-tasks", clientId],
+    queryFn: () => api(`/content-tasks?clientId=${encodeURIComponent(clientId)}`),
+    enabled: Boolean(clientId) && view === "calendar"
+  });
+  const tasks = useMemo(() => tasksQuery.data?.data || [], [tasksQuery.data]);
+  const taskDays = useMemo(() => tasksByDay(tasks, month, year), [tasks, month, year]);
+
+  const grid = useMemo(() => buildMonthGrid(month, year, items, taskDays), [month, year, items, taskDays]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["calendar"] });
@@ -175,6 +186,25 @@ export default function ContentCalendar({ readOnly = false }) {
           {/* A 7-column grid of 30 boxes is unreadable at 375px, so phones get a
               chronological list and the grid appears from tablet width up. */}
           <div className="space-y-3 lg:hidden">
+            {/* The month grid is the desktop answer to "what is going out on the 26th".
+                On a phone the same question is answered as a dated list. */}
+            {taskDays.size > 0 && <div className="panel">
+              <h2 className="section-title">To-dos this month</h2>
+              <div className="mt-3 space-y-2">
+                {[...taskDays.keys()].sort((a, b) => a - b).map((day) => <div key={day} className="calendar-task-day">
+                  <span className="calendar-task-date">{shortDate(new Date(year, month - 1, day))}</span>
+                  <div className="calendar-task-list">
+                    {taskDays.get(day).map((task) => <span
+                      key={task.id}
+                      className={`calendar-task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
+                    >
+                      <strong>{taskTypeLabel(task.type)}</strong> {task.title}
+                    </span>)}
+                  </div>
+                </div>)}
+              </div>
+            </div>}
+
             {items.length === 0 && <p className="empty-state">No posts planned for {monthLabel(month, year)}.</p>}
             {items.map((item) => <div key={item.id}>
               <PostCard
@@ -207,13 +237,20 @@ export default function ContentCalendar({ readOnly = false }) {
                       className={`calendar-chip ${item.status.toLowerCase()}`}
                       onClick={() => !readOnly && setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}
                     >{pretty(item.platform).slice(0, 4)} · {pretty(item.postType).slice(0, 6)}</button>)}
+                    {/* Rendered as text, not a button: the calendar shows what is due on a
+                        day, and a to-do is edited and ticked off on the To-do list tab. */}
+                    {cell.tasks.map((task) => <span
+                      key={task.id}
+                      title={task.title}
+                      className={`calendar-chip task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
+                    >{taskTypeLabel(task.type)} · {task.title}</span>)}
                   </div>
-              </>}
-            </div>)}
+                </>}
+              </div>)}
+            </div>
           </div>
-        </div>
-      </>
-    </QueryState>
+        </>
+      </QueryState>
     </>}
 
     {editing && <RecordModal
@@ -235,7 +272,7 @@ export default function ContentCalendar({ readOnly = false }) {
 
 // The old grid rendered days 1..N straight into a 7-column layout, so every date landed
 // under the wrong weekday. This pads the first week so dates line up (Monday first).
-function buildMonthGrid(month, year, items) {
+function buildMonthGrid(month, year, items, taskDays) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7;
   const cells = Array.from({ length: firstWeekday }, () => null);
@@ -246,7 +283,8 @@ function buildMonthGrid(month, year, items) {
         if (!item.scheduledDate) return false;
         const date = new Date(item.scheduledDate);
         return date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year;
-      })
+      }),
+      tasks: taskDays.get(day) || []
     });
   }
   while (cells.length % 7 !== 0) cells.push(null);

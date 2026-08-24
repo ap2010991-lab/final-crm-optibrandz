@@ -525,8 +525,44 @@ textarea.input { min-height: 84px; }
 /* ---------- content to-do list ---------- */
 .todo-add { display: grid; gap: 10px; }
 .todo-add-row { display: flex; gap: 8px; }
-.todo-add-row .input { flex: 1 1 auto; min-width: 0; }
 .todo-add-row .primary { flex: 0 0 auto; }
+
+/* The date input keeps its own bordered shell so the calendar glyph and the clear button
+   read as part of one control rather than three loose things in a row. */
+.todo-add-date {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ob-stone);
+}
+.todo-add-date svg { flex: 0 0 auto; color: var(--ob-orange); }
+.todo-add-date .input {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  padding-left: 0;
+}
+.todo-add-date .input:focus { box-shadow: none; }
+.todo-add-date:focus-within { border-color: var(--ob-orange); box-shadow: 0 0 0 4px rgba(255, 122, 24, 0.14); }
+.todo-add-date-clear {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  place-items: center;
+  border-radius: 999px;
+  background: #f4f1ea;
+  color: var(--ob-stone);
+}
 
 .todo-progress-track {
   margin-top: 10px;
@@ -615,6 +651,57 @@ textarea.input { min-height: 84px; }
 
 .todo-actions { display: flex; flex: 0 0 auto; gap: 4px; }
 .todo-actions .icon-button { width: 32px; height: 32px; min-height: 32px; padding: 0; }
+
+/* ---------- to-dos shown on the content calendar ---------- */
+/* Text, not a button, and visibly lighter than the post chips beside it: the calendar
+   reports what is due on a day, while ticking and editing live on the To-do list tab. */
+.calendar-chip.task {
+  border-left: 3px solid #6366f1;
+  background: #f5f3ff;
+  color: #4338ca;
+  cursor: default;
+}
+.calendar-chip.task.reel, .calendar-chip.task.video { border-left-color: #db2777; background: #fdf2f8; color: #9d174d; }
+.calendar-chip.task.story { border-left-color: #7c3aed; background: #f5f3ff; color: #5b21b6; }
+.calendar-chip.task.carousel { border-left-color: #0d9488; background: #f0fdfa; color: #115e59; }
+.calendar-chip.task.done {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+  color: #15803d;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.calendar-task-day { display: flex; gap: 10px; align-items: baseline; }
+.calendar-task-date {
+  flex: 0 0 auto;
+  min-width: 3.6rem;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ob-stone);
+}
+.calendar-task-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
+.calendar-task {
+  border-radius: 8px;
+  background: #f5f3ff;
+  color: #4338ca;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.calendar-task strong { font-weight: 900; }
+.calendar-task.reel, .calendar-task.video { background: #fdf2f8; color: #9d174d; }
+.calendar-task.story { background: #f5f3ff; color: #5b21b6; }
+.calendar-task.carousel { background: #f0fdfa; color: #115e59; }
+.calendar-task.done {
+  background: #f0fdf4;
+  color: #15803d;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
 
 /* ---------- schedule calendar ---------- */
 /* Seven columns inside 375px leaves ~46px per day, so a phone gets the date and a count
