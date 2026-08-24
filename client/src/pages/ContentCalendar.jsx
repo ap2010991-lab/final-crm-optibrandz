@@ -2,13 +2,15 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ListTodo, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { monthLabel, pretty, shortDate, toDateInput } from "../lib/format";
+import { monthLabel, pretty, toDateInput } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import RecordModal, { ConfirmModal } from "../components/RecordModal";
 import { CONTENT_STAGES } from "../lib/contentStages";
 import { tasksByDay, taskTypeLabel } from "../lib/contentTasks";
 import PostCard from "../components/PostCard";
 import ContentTodo from "../components/ContentTodo";
+import ContentDayModal from "../components/ContentDayModal";
+import { useContentTasks } from "../lib/useContentTasks";
 import { useToast } from "../lib/useToast";
 
 const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "YOUTUBE", "GMB"];
@@ -45,6 +47,7 @@ export default function ContentCalendar({ readOnly = false }) {
   // work list, so it is pinned to the calendar rather than given a choice.
   const [tab, setTab] = useState(readStoredTab);
   const view = readOnly ? "calendar" : tab;
+  const [openDay, setOpenDay] = useState(null);
 
   const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
   const clients = useMemo(() => clientsQuery.data?.data || [], [clientsQuery.data]);
@@ -60,17 +63,14 @@ export default function ContentCalendar({ readOnly = false }) {
   });
   const items = useMemo(() => query.data?.data || [], [query.data]);
 
-  // Same query key the To-do list uses, so the two tabs share one cache entry and ticking
-  // a task off there is reflected here without a second round trip.
-  const tasksQuery = useQuery({
-    queryKey: ["content-tasks", clientId],
-    queryFn: () => api(`/content-tasks?clientId=${encodeURIComponent(clientId)}`),
-    enabled: Boolean(clientId) && view === "calendar"
-  });
-  const tasks = useMemo(() => tasksQuery.data?.data || [], [tasksQuery.data]);
+  // Shared with the To-do tab, so ticking a task off there is reflected here without a
+  // second round trip. Disabled for the client portal: the agency's work list is not
+  // something a client should be shown, so it is never even requested.
+  const { tasks } = useContentTasks(clientId, { enabled: view === "calendar" && !readOnly });
   const taskDays = useMemo(() => tasksByDay(tasks, month, year), [tasks, month, year]);
 
   const grid = useMemo(() => buildMonthGrid(month, year, items, taskDays), [month, year, items, taskDays]);
+  const openCell = openDay ? grid.find((cell) => cell && cell.day === openDay) : null;
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["calendar"] });
@@ -90,6 +90,7 @@ export default function ContentCalendar({ readOnly = false }) {
     const next = new Date(year, month - 1 + delta, 1);
     setMonth(next.getMonth() + 1);
     setYear(next.getFullYear());
+    setOpenDay(null);
   }
 
   async function saveItem(payload) {
@@ -183,28 +184,58 @@ export default function ContentCalendar({ readOnly = false }) {
 
       <QueryState query={query} label="content plan">
         <>
-          {/* A 7-column grid of 30 boxes is unreadable at 375px, so phones get a
-              chronological list and the grid appears from tablet width up. */}
-          <div className="space-y-3 lg:hidden">
-            {/* The month grid is the desktop answer to "what is going out on the 26th".
-                On a phone the same question is answered as a dated list. */}
-            {taskDays.size > 0 && <div className="panel">
-              <h2 className="section-title">To-dos this month</h2>
-              <div className="mt-3 space-y-2">
-                {[...taskDays.keys()].sort((a, b) => a - b).map((day) => <div key={day} className="calendar-task-day">
-                  <span className="calendar-task-date">{shortDate(new Date(year, month - 1, day))}</span>
-                  <div className="calendar-task-list">
-                    {taskDays.get(day).map((task) => <span
-                      key={task.id}
-                      className={`calendar-task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
-                    >
-                      <strong>{taskTypeLabel(task.type)}</strong> {task.title}
-                    </span>)}
-                  </div>
-                </div>)}
-              </div>
-            </div>}
+          {/* One grid at every width. Under 1024px each cell is just the date and a count,
+              which is the only thing that fits in a seventh of a 375px screen; the chips
+              appear from there up. Either way the date opens the day sheet. */}
+          <div className="panel">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="section-title">{monthLabel(month, year)}</h2>
+              {!readOnly && <span className="text-xs font-semibold text-zinc-500">
+                Tap a date to add a reel, post or story to it.
+              </span>}
+            </div>
 
+            <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-zinc-400">
+              {WEEKDAYS.map((day) => <div key={day}>{day}</div>)}
+            </div>
+            <div className="mt-1 grid grid-cols-7 gap-1 lg:gap-2">
+              {grid.map((cell, index) => {
+                if (!cell) return <div key={`pad-${index}`} className="calendar-cell empty" />;
+                const count = cell.items.length + cell.tasks.length;
+                return <div key={cell.day} className="calendar-cell">
+                  <button
+                    type="button"
+                    className={`calendar-day ${isToday(cell.day, month, year) ? "is-today" : ""}`}
+                    onClick={() => !readOnly && setOpenDay(cell.day)}
+                    disabled={readOnly}
+                    aria-label={`${cell.day} ${monthLabel(month, year)}, ${count} planned`}
+                  >
+                    <span className="calendar-day-number">{cell.day}</span>
+                    {count > 0 && <span className="calendar-day-count">{count}</span>}
+                  </button>
+
+                  <div className="calendar-cell-items">
+                    {cell.items.map((item) => <button
+                      key={item.id}
+                      className={`calendar-chip ${item.status.toLowerCase()}`}
+                      onClick={() => !readOnly && setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}
+                    >{pretty(item.platform).slice(0, 4)} · {pretty(item.postType).slice(0, 6)}</button>)}
+                    {/* Rendered as text, not a button: the cell reports what is due, and the
+                        date above opens the sheet where a to-do is added and ticked off. */}
+                    {cell.tasks.map((task) => <span
+                      key={task.id}
+                      title={task.title}
+                      className={`calendar-chip task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
+                    >{taskTypeLabel(task.type)} · {task.title}</span>)}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+
+          {/* The grid carries the dates; the cards below carry the creatives, which only
+              phones need since the chips already show them from 1024px up. */}
+          <div className="space-y-3 lg:hidden">
             {items.length === 0 && <p className="empty-state">No posts planned for {monthLabel(month, year)}.</p>}
             {items.map((item) => <div key={item.id}>
               <PostCard
@@ -221,37 +252,17 @@ export default function ContentCalendar({ readOnly = false }) {
               </div>}
             </div>)}
           </div>
-
-          <div className="panel hidden lg:block">
-            <h2 className="section-title">{monthLabel(month, year)}</h2>
-            <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-zinc-400">
-              {WEEKDAYS.map((day) => <div key={day}>{day}</div>)}
-            </div>
-            <div className="mt-1 grid grid-cols-7 gap-2">
-              {grid.map((cell, index) => <div key={index} className={`calendar-cell ${cell ? "" : "empty"}`}>
-                {cell && <>
-                  <div className="text-xs font-black text-slate-500">{cell.day}</div>
-                  <div className="mt-1 space-y-1">
-                    {cell.items.map((item) => <button
-                      key={item.id}
-                      className={`calendar-chip ${item.status.toLowerCase()}`}
-                      onClick={() => !readOnly && setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}
-                    >{pretty(item.platform).slice(0, 4)} · {pretty(item.postType).slice(0, 6)}</button>)}
-                    {/* Rendered as text, not a button: the calendar shows what is due on a
-                        day, and a to-do is edited and ticked off on the To-do list tab. */}
-                    {cell.tasks.map((task) => <span
-                      key={task.id}
-                      title={task.title}
-                      className={`calendar-chip task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
-                    >{taskTypeLabel(task.type)} · {task.title}</span>)}
-                  </div>
-                </>}
-              </div>)}
-            </div>
-          </div>
         </>
       </QueryState>
     </>}
+
+    {openCell && <ContentDayModal
+      date={new Date(year, month - 1, openCell.day)}
+      clientId={clientId}
+      clientName={activeClient?.businessName}
+      posts={openCell.items}
+      onClose={() => setOpenDay(null)}
+    />}
 
     {editing && <RecordModal
       title={editing.id ? "Edit post" : "Add post"}
@@ -269,6 +280,11 @@ export default function ContentCalendar({ readOnly = false }) {
     />}
   </div>;
 }
+
+const isToday = (day, month, year) => {
+  const now = new Date();
+  return now.getDate() === day && now.getMonth() === month - 1 && now.getFullYear() === year;
+};
 
 // The old grid rendered days 1..N straight into a 7-column layout, so every date landed
 // under the wrong weekday. This pads the first week so dates line up (Monday first).

@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Check, Eraser, ListTodo, Pencil, Plus, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
 import { fromDateInput, shortDate, toDateInput } from "../lib/format";
 import { isOverdue, startOfToday, TASK_TYPES, taskTypeLabel } from "../lib/contentTasks";
+import { useContentTasks } from "../lib/useContentTasks";
 import { QueryState } from "./QueryState";
 import RecordModal, { ConfirmModal } from "./RecordModal";
 import { useToast } from "../lib/useToast";
@@ -18,7 +18,6 @@ import { useToast } from "../lib/useToast";
  */
 
 export default function ContentTodo({ clientId, clientName }) {
-  const queryClient = useQueryClient();
   const { notify } = useToast();
   const titleRef = useRef(null);
 
@@ -33,39 +32,11 @@ export default function ContentTodo({ clientId, clientName }) {
   const [clearing, setClearing] = useState(false);
   const [showDone, setShowDone] = useState(true);
 
-  const queryKey = ["content-tasks", clientId];
-  const query = useQuery({
-    queryKey,
-    queryFn: () => api(`/content-tasks?clientId=${encodeURIComponent(clientId)}`),
-    enabled: Boolean(clientId)
-  });
+  const { query, tasks, toggle, add, refresh } = useContentTasks(clientId);
 
-  const tasks = useMemo(() => query.data?.data || [], [query.data]);
   const pending = useMemo(() => tasks.filter((task) => !task.isDone), [tasks]);
   const done = useMemo(() => tasks.filter((task) => task.isDone), [tasks]);
   const percent = tasks.length ? Math.round((done.length / tasks.length) * 100) : 0;
-
-  const refresh = () => queryClient.invalidateQueries({ queryKey });
-
-  async function toggle(task) {
-    // Ticking is the whole point of this screen, so the line strikes through on the tap
-    // and the request catches up behind it. A failure puts the cache back as it was.
-    const previous = queryClient.getQueryData(queryKey);
-    queryClient.setQueryData(queryKey, (current) => current && {
-      ...current,
-      data: current.data.map((entry) => entry.id === task.id
-        ? { ...entry, isDone: !entry.isDone, completedAt: entry.isDone ? null : new Date().toISOString() }
-        : entry)
-    });
-
-    try {
-      await api(`/content-tasks/${task.id}/toggle`, { method: "PUT" });
-      refresh();
-    } catch (error) {
-      queryClient.setQueryData(queryKey, previous);
-      notify(error.message, "error");
-    }
-  }
 
   async function addTask(event) {
     event.preventDefault();
@@ -73,12 +44,8 @@ export default function ContentTodo({ clientId, clientName }) {
     if (!title || adding) return;
     setAdding(true);
     try {
-      await api("/content-tasks", {
-        method: "POST",
-        body: JSON.stringify({ clientId, title, type: draftType, dueDate: fromDateInput(draftDate) })
-      });
+      await add({ title, type: draftType, dueDate: fromDateInput(draftDate) });
       setDraftTitle("");
-      refresh();
       // A month's plan gets typed in one sitting, so the caret stays where it was.
       titleRef.current?.focus();
     } catch (error) {

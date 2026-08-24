@@ -512,8 +512,61 @@ textarea.input { min-height: 84px; }
 .team-card.inactive { opacity: 0.62; background: #f8fafc; }
 
 /* ---------- content calendar ---------- */
-.calendar-cell { min-height: 92px; border: 1px solid var(--ob-line); border-radius: 10px; background: #fff; padding: 6px; }
+/* The same grid serves a 375px phone and a desktop. A seventh of a phone screen is about
+   45px wide, which fits a date and a count and nothing else, so the chips are held back
+   until there is room for them. */
+.calendar-cell {
+  display: flex;
+  min-height: 54px;
+  flex-direction: column;
+  border: 1px solid var(--ob-line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 3px;
+}
 .calendar-cell.empty { border-style: dashed; background: transparent; }
+.calendar-cell-items { display: none; }
+
+/* On a phone the button is the whole cell, so the tap target is the box you can see
+   rather than the two-digit number inside it. */
+.calendar-day {
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 7px;
+  padding: 4px 2px;
+  transition: background 0.12s ease;
+}
+.calendar-day:hover:not(:disabled) { background: #fff3ce; }
+.calendar-day:disabled { cursor: default; }
+.calendar-day.is-today { box-shadow: inset 0 0 0 2px var(--ob-black); }
+.calendar-day-number { font-size: 12px; font-weight: 800; color: var(--ob-stone); line-height: 1; }
+.calendar-day.is-today .calendar-day-number { color: var(--ob-ink); }
+.calendar-day-count {
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--ob-orange), var(--ob-yellow));
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--ob-black);
+}
+
+@media (min-width: 1024px) {
+  .calendar-cell { min-height: 92px; padding: 6px; }
+  .calendar-cell-items { display: grid; gap: 4px; margin-top: 4px; }
+  /* From here up the cell also holds chips, so the date sits at the top of it. */
+  .calendar-day { flex: 0 0 auto; justify-content: space-between; padding: 2px 4px; }
+  /* The chips below already say how much is on the day, so the badge would only repeat
+     itself once there is room to show them. */
+  .calendar-day-count { display: none; }
+}
 .calendar-chip {
   display: block; width: 100%; border-radius: 6px; background: #eef2ff; color: #3730a3;
   padding: 3px 5px; text-align: left; font-size: 10px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -672,35 +725,30 @@ textarea.input { min-height: 84px; }
   text-decoration-thickness: 1px;
 }
 
-.calendar-task-day { display: flex; gap: 10px; align-items: baseline; }
-.calendar-task-date {
+/* ---------- day sheet ---------- */
+.day-add { display: grid; gap: 10px; }
+.day-post-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.day-post-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--ob-line);
+  border-radius: 12px;
+  background: #fffdf7;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ob-ink);
+}
+.day-post-status {
   flex: 0 0 auto;
-  min-width: 3.6rem;
+  border-radius: 999px;
+  background: #f4f1ea;
+  color: var(--ob-stone);
+  padding: 3px 8px;
   font-size: 11px;
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--ob-stone);
-}
-.calendar-task-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
-.calendar-task {
-  border-radius: 8px;
-  background: #f5f3ff;
-  color: #4338ca;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-.calendar-task strong { font-weight: 900; }
-.calendar-task.reel, .calendar-task.video { background: #fdf2f8; color: #9d174d; }
-.calendar-task.story { background: #f5f3ff; color: #5b21b6; }
-.calendar-task.carousel { background: #f0fdfa; color: #115e59; }
-.calendar-task.done {
-  background: #f0fdf4;
-  color: #15803d;
-  text-decoration: line-through;
-  text-decoration-thickness: 1.5px;
 }
 
 /* ---------- schedule calendar ---------- */
