@@ -118,6 +118,7 @@ model Client {
   campaigns     CampaignLog[]
   activities    Activity[]
   calendarItems ContentCalendar[]
+  contentTasks  ContentTask[]
   reports       Report[]
 
   @@index([status])
@@ -258,6 +259,42 @@ enum ContentStatus {
   APPROVED
   REJECTED
   PUBLISHED
+}
+
+// The plain checklist of reels and posts owed to one client, ticked off as each one is
+// made and uploaded.
+//
+// ContentCalendar above is the dated publishing plan and carries a platform, a date, a
+// creative and a four-stage approval pipeline. This is the working list kept beside it:
+// a line of text, a kind, and a tick. Keeping them separate is deliberate — forcing a
+// "shoot the Diwali reel" note through the calendar's pipeline is what stopped anyone
+// using it as a to-do list in the first place.
+model ContentTask {
+  id          String          @id @default(uuid())
+  clientId    String
+  client      Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title       String
+  type        ContentTaskType @default(POST)
+  notes       String?
+  dueDate     DateTime?
+  isDone      Boolean         @default(false)
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([clientId, isDone])
+  @@index([clientId, createdAt])
+}
+
+// Deliberately the words the team uses out loud, not ContentCalendar's PostType — nobody
+// asks for "a STATIC", they ask for a post.
+enum ContentTaskType {
+  REEL
+  POST
+  STORY
+  CAROUSEL
+  VIDEO
+  OTHER
 }
 
 model Invoice {

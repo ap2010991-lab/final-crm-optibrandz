@@ -56,6 +56,7 @@ app.use("/api/clients", verifyToken, requirePermission("clients"), require("./ro
 app.use("/api/services", verifyToken, requirePermission("services"), require("./routes/services.routes"));
 app.use("/api/tasks", verifyToken, requirePermission("services"), require("./routes/tasks.routes"));
 app.use("/api/calendar", verifyToken, requirePermission("content"), require("./routes/calendar.routes"));
+app.use("/api/content-tasks", verifyToken, requirePermission("content"), require("./routes/content-tasks.routes"));
 app.use("/api/invoices", verifyToken, requirePermission("invoices"), require("./routes/invoices.routes"));
 app.use("/api/campaigns", verifyToken, requirePermission("campaigns"), require("./routes/campaigns.routes"));
 app.use("/api/reports", verifyToken, requirePermission("reports"), require("./routes/reports.routes"));

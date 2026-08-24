@@ -447,7 +447,7 @@ button, a, select, [role="button"] { touch-action: manipulation; }
 .tabs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .tabs-scroll::-webkit-scrollbar { display: none; }
 .segmented, .tabs { @apply inline-flex rounded-full border p-1; border-color: var(--ob-line); background: #f4f1ea; white-space: nowrap; }
-.segmented button, .tabs button { @apply rounded-full px-3 text-sm font-bold; min-height: 38px; color: var(--ob-stone); }
+.segmented button, .tabs button { @apply inline-flex items-center justify-center gap-2 rounded-full px-3 text-sm font-bold; min-height: 38px; color: var(--ob-stone); }
 .segmented .active, .tabs .active { background: var(--ob-black); color: #fff; }
 
 /* ---------- forms ---------- */
@@ -521,6 +521,100 @@ textarea.input { min-height: 84px; }
 .calendar-chip.approved, .calendar-chip.published { background: #dcfce7; color: #166534; }
 .calendar-chip.review { background: #ede9fe; color: #5b21b6; }
 .calendar-chip.rejected { background: #ffe4e6; color: #9f1239; }
+
+/* ---------- content to-do list ---------- */
+.todo-add { display: grid; gap: 10px; }
+.todo-add-row { display: flex; gap: 8px; }
+.todo-add-row .input { flex: 1 1 auto; min-width: 0; }
+.todo-add-row .primary { flex: 0 0 auto; }
+
+.todo-progress-track {
+  margin-top: 10px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f4f1ea;
+}
+.todo-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--ob-orange), var(--ob-yellow));
+  transition: width 0.25s ease;
+}
+
+.todo-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+}
+.todo-row.done { background: #fbfaf7; border-color: rgba(9, 9, 9, 0.06); }
+
+.todo-check {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #d6d0c4;
+  border-radius: 9px;
+  background: #fff;
+  color: transparent;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+/* A 28px box keeps the row compact, but this is the control that gets tapped dozens of
+   times a day on a phone, so the hit area is stretched to a full 44px thumb. The 8px
+   spill stays inside the row's own 12px padding, so it never steals a neighbour's tap. */
+.todo-check::after { content: ""; position: absolute; inset: -8px; }
+.todo-check:hover { border-color: var(--ob-orange); }
+.todo-row.done .todo-check { border-color: #16a34a; background: #16a34a; color: #fff; }
+
+.todo-body { min-width: 0; flex: 1 1 auto; }
+.todo-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: var(--ob-ink);
+  overflow-wrap: anywhere;
+}
+/* The crossed-out line is the whole confirmation that a post went out, so it stays on
+   screen rather than the task disappearing from the list. */
+.todo-row.done .todo-title { text-decoration: line-through; text-decoration-thickness: 2px; color: #9a9187; }
+
+.todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #9a9187;
+}
+.todo-type {
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.todo-type.reel, .todo-type.video { background: #fce7f3; color: #9d174d; }
+.todo-type.story { background: #ede9fe; color: #5b21b6; }
+.todo-type.carousel { background: #ccfbf1; color: #115e59; }
+.todo-row.done .todo-type { background: #f4f4f5; color: #78716c; }
+.todo-overdue { color: #be123c; }
+.todo-notes { margin: 6px 0 0; font-size: 12px; font-weight: 600; line-height: 1.5; color: #78716c; overflow-wrap: anywhere; }
+
+.todo-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.todo-actions .icon-button { width: 32px; height: 32px; min-height: 32px; padding: 0; }
 
 /* ---------- schedule calendar ---------- */
 /* Seven columns inside 375px leaves ~46px per day, so a phone gets the date and a count
