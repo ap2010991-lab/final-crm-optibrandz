@@ -4,6 +4,7 @@ const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { syncClientServices, setClientMrr } = require("../utils/syncClientServices");
+const { ClientStatus, ServiceType } = require("../utils/enums");
 
 const router = express.Router();
 
@@ -15,14 +16,14 @@ const clientSchema = z.object({
   city: z.string().nullable().optional(),
   industry: z.string().nullable().optional(),
   websiteUrl: z.string().nullable().optional(),
-  status: z.string().default("ACTIVE"),
+  status: ClientStatus.default("ACTIVE"),
   healthScore: z.number().min(0).max(100).default(100),
   monthlyContentTarget: z.number().int().min(0).max(500).nullable().optional(),
   totalValue: z.number().min(0).default(0),
   advancePaid: z.number().min(0).default(0),
   mrr: z.number().min(0).optional(),
   renewalDate: z.string().optional().nullable(),
-  services: z.array(z.string()).default([])
+  services: z.array(ServiceType).default([])
 });
 
 const clientUpdateSchema = z.object({
@@ -33,14 +34,14 @@ const clientUpdateSchema = z.object({
   city: z.string().nullable().optional(),
   industry: z.string().nullable().optional(),
   websiteUrl: z.string().nullable().optional(),
-  status: z.string().optional(),
+  status: ClientStatus.optional(),
   healthScore: z.number().min(0).max(100).optional(),
   monthlyContentTarget: z.number().int().min(0).max(500).nullable().optional(),
   totalValue: z.number().min(0).optional(),
   advancePaid: z.number().min(0).optional(),
   mrr: z.number().min(0).optional(),
   renewalDate: z.string().optional().nullable(),
-  services: z.array(z.string()).optional()
+  services: z.array(ServiceType).optional()
 });
 
 function clientWhere(user) {
@@ -116,8 +117,10 @@ router.get("/:id", asyncRoute(async (req, res) => {
       services: true,
       invoices: { orderBy: { createdAt: "desc" }, take: 3 },
       campaigns: { orderBy: { createdAt: "desc" }, take: 3 },
-      calendarItems: { orderBy: { scheduledDate: "asc" } },
-      activities: { orderBy: { createdAt: "desc" } }
+      // Both were unbounded. A client on a 26-posts-a-month plan carries 300+ calendar
+      // rows a year and every one was loaded to render a detail page that shows a handful.
+      calendarItems: { orderBy: { scheduledDate: "desc" }, take: 60 },
+      activities: { orderBy: { createdAt: "desc" }, take: 30 }
     }
   });
   if (!client) return res.status(404).json({ message: "Client not found" });

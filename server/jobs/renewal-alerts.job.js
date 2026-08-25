@@ -1,31 +1,27 @@
-const cron = require("node-cron");
 const prisma = require("../db/prisma");
 
+/**
+ * Renewals coming up.
+ *
+ * This job existed only to insert a Notification row per upcoming renewal per user, with
+ * no de-duplication at all, so every monthly run added another copy of every renewal
+ * already on screen. Both the action centre and the Today screen derive renewals live
+ * from `Client.renewalDate`, which cannot go stale and cannot accumulate.
+ *
+ * It is kept as a read-only report so the cron endpoint that calls it still answers, and
+ * so there is one place to hang a real notification channel (email or WhatsApp) if the
+ * agency ever wants pushing rather than pulling.
+ */
 async function runRenewalAlerts() {
-  const [notifyUsers, clients] = await Promise.all([
-    prisma.user.findMany({ where: { role: { in: ["OWNER", "ACCOUNT_MANAGER"] }, isActive: true } }),
-    prisma.client.findMany({
-      where: {
-        status: { in: ["ACTIVE", "ONBOARDING"] },
-        renewalDate: { gte: new Date(), lt: new Date(Date.now() + 30 * 86400000) }
-      }
-    })
-  ]);
-  const notifications = clients.flatMap((client) => notifyUsers.map((user) => ({
-    userId: user.id,
-    type: "RENEWAL",
-    message: `${client.businessName} renewal due soon`,
-    link: `/clients/${client.id}`,
-    isRead: false
-  })));
-  if (notifications.length) await prisma.notification.createMany({ data: notifications });
-  return { clients: clients.length, notifications: notifications.length };
-}
-
-function registerRenewalAlerts() {
-  cron.schedule("0 9 1 * *", () => {
-    runRenewalAlerts().catch((error) => console.error("renewal-alerts failed", error));
+  const clients = await prisma.client.findMany({
+    where: {
+      status: { in: ["ACTIVE", "ONBOARDING"] },
+      renewalDate: { gte: new Date(), lt: new Date(Date.now() + 30 * 86400000) }
+    },
+    select: { id: true, businessName: true, renewalDate: true },
+    orderBy: { renewalDate: "asc" }
   });
+  return { clients: clients.length, upcoming: clients };
 }
 
-module.exports = { registerRenewalAlerts, runRenewalAlerts };
+module.exports = { runRenewalAlerts };

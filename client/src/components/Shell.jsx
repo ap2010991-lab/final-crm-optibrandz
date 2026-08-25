@@ -92,7 +92,11 @@ export default function Shell({ children }) {
             <Bell size={18} />
             {unread > 0 && <span className="notification-count">{unread > 9 ? "9+" : unread}</span>}
           </button>
-          {showNotifications && <NotificationPanel items={notificationItems} onClose={() => setShowNotifications(false)} />}
+          {showNotifications && <NotificationPanel
+            items={notificationItems}
+            savedCount={data?.meta?.savedCount || 0}
+            onClose={() => setShowNotifications(false)}
+          />}
         </div>
       </header>
 

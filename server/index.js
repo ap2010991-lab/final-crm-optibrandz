@@ -10,6 +10,7 @@ const verifyToken = require("./middleware/verifyToken");
 const requirePermission = require("./middleware/requirePermission");
 const requireRole = require("./middleware/requireRole");
 const { isAllowedOrigin } = require("./utils/allowedOrigins");
+const { mapPrismaError } = require("./utils/prismaErrors");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -68,13 +69,26 @@ app.use("/api/team", verifyToken, requireRole(["OWNER"]), requirePermission("tea
 app.use("/api", (_req, res) => res.status(404).json({ message: "API route not found" }));
 
 app.use((err, _req, res, _next) => {
-  const status = err.status || (err.name === "ZodError" ? 422 : 500);
+  // A rejected value is the caller's mistake, so it must not be reported as a server
+  // fault: a 500 tells the CRM nothing it can show and hides real faults in the noise.
+  const mapped = mapPrismaError(err);
+  const status = err.status || (err.name === "ZodError" ? 422 : mapped?.status || 500);
   if (status >= 500) console.error(err);
-  const message = err.name === "ZodError"
-    ? "Some fields are not filled in correctly."
-    : status >= 500 && process.env.NODE_ENV === "production"
+
+  // Zod already explains which value was wrong and what was expected; passing that
+  // through is far more useful than a generic "some fields are not filled in correctly".
+  const zodMessage = err.name === "ZodError"
+    ? (err.issues || [])
+        .map((issue) => (issue.path?.length ? `${issue.path.join(".")}: ` : "") + issue.message)
+        .slice(0, 3)
+        .join(" ")
+    : null;
+
+  const message = zodMessage
+    || mapped?.message
+    || (status >= 500 && process.env.NODE_ENV === "production"
       ? "Something went wrong. Please try again."
-      : err.message || "Server error";
+      : err.message || "Server error");
   res.status(status).json({ message, issues: err.issues });
 });
 
@@ -84,9 +98,7 @@ app.use((err, _req, res, _next) => {
 // same work is driven by Vercel Cron hitting /api/cron/daily.
 if (require.main === module) {
   const { registerDailyAlerts } = require("./jobs/daily-alerts.job");
-  const { registerRenewalAlerts } = require("./jobs/renewal-alerts.job");
   registerDailyAlerts();
-  registerRenewalAlerts();
   app.listen(port, () => {
     console.log(`OptiBrandz CRM API running on http://localhost:${port}`);
   });

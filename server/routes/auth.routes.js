@@ -54,8 +54,14 @@ router.post("/login", asyncRoute(async (req, res) => {
     return res.status(429).json({ message: `Too many failed attempts. Try again in ${minutes} minute(s).` });
   }
 
+  // Serving the lockout used to leave the counter sitting on the threshold, so the very
+  // next wrong password re-locked the account — and the correct one was then refused too.
+  // Anyone who tripped it once was permanently one typo from being locked out again.
+  // An expired lock has been served: the slate is clean.
+  const priorFailures = user.lockedUntil ? 0 : (user.failedLoginCount || 0);
+
   if (!(await bcrypt.compare(body.password, user.password))) {
-    const failedLoginCount = (user.failedLoginCount || 0) + 1;
+    const failedLoginCount = priorFailures + 1;
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -69,6 +75,7 @@ router.post("/login", asyncRoute(async (req, res) => {
   if (user.failedLoginCount || user.lockedUntil) {
     await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } });
   }
+
 
   const token = signToken(user);
   setSessionCookie(res, token);

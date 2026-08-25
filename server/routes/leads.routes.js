@@ -5,6 +5,7 @@ const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { onlyProvided } = require("../utils/onlyProvided");
 const { syncClientServices } = require("../utils/syncClientServices");
+const { LeadSource, LeadStatus, ServiceType, ActivityType } = require("../utils/enums");
 
 const router = express.Router();
 
@@ -14,9 +15,9 @@ const leadSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   businessName: z.string().optional(),
   city: z.string().optional(),
-  source: z.string().default("WEBSITE"),
-  status: z.string().default("NEW"),
-  serviceInterest: z.array(z.string()).default([]),
+  source: LeadSource.default("WEBSITE"),
+  status: LeadStatus.default("NEW"),
+  serviceInterest: z.array(ServiceType).default([]),
   budget: z.string().optional(),
   notes: z.string().optional(),
   assignedToId: z.string().optional().nullable(),
@@ -96,7 +97,7 @@ router.delete("/:id", requireRole(["OWNER", "ACCOUNT_MANAGER"]), asyncRoute(asyn
 }));
 
 router.post("/:id/activity", asyncRoute(async (req, res) => {
-  const body = z.object({ type: z.string(), note: z.string().min(1) }).parse(req.body);
+  const body = z.object({ type: ActivityType, note: z.string().min(1).max(2000) }).parse(req.body);
   const activity = await prisma.activity.create({ data: { ...body, leadId: req.params.id, userId: req.user.id } });
   res.status(201).json({ data: activity });
 }));

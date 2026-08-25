@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { pretty, shortDate } from "../lib/format";
 import { useToast } from "../lib/useToast";
 
-export default function NotificationPanel({ items = [], onClose }) {
+export default function NotificationPanel({ items = [], savedCount = 0, onClose }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
 
@@ -26,9 +26,17 @@ export default function NotificationPanel({ items = [], onClose }) {
       <div className="flex items-center justify-between gap-3 border-b border-black/10 p-4">
         <div>
           <h2 className="text-sm font-black">Today&rsquo;s action centre</h2>
-          <p className="text-xs font-semibold text-zinc-500">{items.length} item{items.length === 1 ? "" : "s"} need attention</p>
+          <p className="text-xs font-semibold text-zinc-500">
+            {items.length === 0
+              ? "Nothing outstanding"
+              : `${items.length} item${items.length === 1 ? "" : "s"} need attention`}
+          </p>
         </div>
-        <button type="button" className="table-action" onClick={markAllRead}>Mark all read</button>
+        {/* Only shown when there are stored notifications a read flag can clear. The
+            rest are derived from live records — an overdue invoice stops being listed
+            when it is paid, not when it is dismissed — and the button used to imply
+            otherwise, leaving a badge that could never reach zero. */}
+        {savedCount > 0 && <button type="button" className="table-action" onClick={markAllRead}>Mark all read</button>}
       </div>
       <div className="max-h-[60vh] overflow-auto p-2">
         {items.length === 0 && <div className="p-5 text-center text-sm font-semibold text-zinc-500">Nothing due today. Nice and quiet.</div>}

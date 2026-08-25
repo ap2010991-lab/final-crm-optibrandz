@@ -313,11 +313,16 @@ model Invoice {
   notes         String?
   pdfUrl        String?
   lineItems     Json
+  // Raised by the monthly retainer run rather than typed by hand. The run used to ask
+  // "has this client had any invoice this month?", so a ₹500 one-off charge silently
+  // cancelled their whole retainer for that month. It now asks only about retainers.
+  isRetainer    Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   @@index([clientId, status])
   @@index([dueDate])
+  @@index([isRetainer, createdAt])
 }
 
 enum InvoiceStatus {

@@ -9,9 +9,11 @@ const router = express.Router();
 function authorizeCron(req, res, next) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return res.status(503).json({ message: "CRON_SECRET is not configured" });
+  // Header only: a secret passed as ?key= ends up in access logs, browser history and
+  // any referrer sent onward, none of which can be un-leaked.
   const header = req.headers.authorization || "";
-  const provided = header.startsWith("Bearer ") ? header.slice(7) : req.query.key;
-  if (provided !== secret) return res.status(401).json({ message: "Invalid cron secret" });
+  const provided = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!provided || provided !== secret) return res.status(401).json({ message: "Invalid cron secret" });
   next();
 }
 

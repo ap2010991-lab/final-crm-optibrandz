@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
+const { invoiceStatus } = require("../utils/invoiceStatus");
 
 const router = express.Router();
 
@@ -8,14 +9,6 @@ function startOfToday() {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
   return date;
-}
-
-// An invoice is overdue the moment its due date passes, whether or not the nightly job
-// has run yet. Reading it this way means the dashboard is never stale.
-function effectiveStatus(invoice, today) {
-  if (["PAID", "CANCELLED"].includes(invoice.status)) return invoice.status;
-  if (invoice.dueDate && new Date(invoice.dueDate) < today) return "OVERDUE";
-  return invoice.status;
 }
 
 router.get("/", asyncRoute(async (_req, res) => {
@@ -26,7 +19,7 @@ router.get("/", asyncRoute(async (_req, res) => {
   // including long text fields the dashboard never reads. Selecting only what is
   // aggregated keeps the response small and the query cheap as the CRM grows.
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const [clients, leads, rawInvoices, tasks, serviceOrders, campaigns, contentInReview, users] = await Promise.all([
+  const [clients, leads, rawInvoices, tasks, serviceOrders, campaigns, contentAwaitingApproval, users] = await Promise.all([
     prisma.client.findMany({
       select: { id: true, businessName: true, status: true, totalValue: true, advancePaid: true, renewalDate: true }
     }),
@@ -48,13 +41,17 @@ router.get("/", asyncRoute(async (_req, res) => {
       select: { platform: true, adSpend: true, leadsGenerated: true, cpl: true },
       orderBy: { createdAt: "desc" }
     }),
-    prisma.contentCalendar.count({ where: { status: "REVIEW" } }),
+    // Was counting REVIEW, a stage the pipeline abandoned, so this tile read 0 for ever.
+    // IN_DESIGN is where a post actually sits waiting for the owner to sign it off.
+    prisma.contentCalendar.count({ where: { status: "IN_DESIGN" } }),
     prisma.user.findMany({
       where: { isActive: true, role: { not: "CLIENT" } },
       select: { id: true, name: true, role: true }
     })
   ]);
-  const invoices = rawInvoices.map((invoice) => ({ ...invoice, status: effectiveStatus(invoice, today) }));
+  // An invoice is overdue the moment its due date passes, whether or not the nightly job
+  // has run yet, so the status is derived on read using the same rule as the write path.
+  const invoices = rawInvoices.map((invoice) => ({ ...invoice, status: invoiceStatus(invoice, today) }));
 
   const activeClients = clients.filter((client) => client.status === "ACTIVE");
   const activeOrders = serviceOrders.filter((order) => order.status === "ACTIVE");
@@ -108,7 +105,7 @@ router.get("/", asyncRoute(async (_req, res) => {
     invoicedTotal: invoiced,
     collectedTotal: collected,
     activeServicesCount: activeOrders.length,
-    contentInReview,
+    contentAwaitingApproval,
     campaignLeads: campaigns.reduce((sum, item) => sum + Number(item.leadsGenerated || 0), 0),
     newLeadsThisWeek: leads.filter((lead) => lead.status === "NEW" && (!lead.createdAt || new Date(lead.createdAt) >= weekAgo)).length,
     conversionRate,

@@ -57,7 +57,7 @@ function DashboardView({ d }) {
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <MiniStat label="Active services" value={d.activeServicesCount} detail="Live retainers and projects" />
-      <MiniStat label="Content in review" value={d.contentInReview} detail="Posts waiting for approval" />
+      <MiniStat label="Awaiting approval" value={d.contentAwaitingApproval} detail="Designed, not yet signed off" />
       <MiniStat label="Campaign leads" value={d.campaignLeads} detail="Leads from campaign reports" />
       <MiniStat label="Conversion rate" value={`${d.conversionRate || 0}%`} detail="Converted leads vs pipeline" />
     </div>

@@ -9,22 +9,36 @@ const { allPermissions, roles } = require("../utils/constants");
 const router = express.Router();
 router.use(requireRole(["OWNER"]));
 
-const publicUser = (user) => ({ ...user, password: undefined });
+const publicUser = (user) => ({ ...user, password: undefined, failedLoginCount: undefined, lockedUntil: undefined });
 const initials = (name) => name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 const validPermissions = z.array(z.enum([...allPermissions, "portal"])).default(["dashboard"]);
 
 router.get("/", asyncRoute(async (_req, res) => {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { tasks: true } });
   const now = new Date();
-  const data = users.map((user) => {
-    const mine = user.tasks || [];
-    return {
-      ...publicUser(user),
-      totalTasks: mine.length,
-      doneTasks: mine.filter((task) => task.status === "DONE").length,
-      overdueTasks: mine.filter((task) => new Date(task.dueDate) < now && task.status !== "DONE").length
-    };
-  });
+  // Every task for every user used to be loaded to produce three counts per row. Three
+  // grouped counts do the same work in the database and stay flat as the CRM fills up.
+  const [users, totals, done, overdue] = await Promise.all([
+    prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.task.groupBy({ by: ["assignedToId"], _count: { _all: true } }),
+    prisma.task.groupBy({ by: ["assignedToId"], where: { status: "DONE" }, _count: { _all: true } }),
+    prisma.task.groupBy({
+      by: ["assignedToId"],
+      where: { status: { not: "DONE" }, dueDate: { lt: now } },
+      _count: { _all: true }
+    })
+  ]);
+
+  const countsBy = (rows) => new Map(rows.map((row) => [row.assignedToId, row._count._all]));
+  const totalBy = countsBy(totals);
+  const doneBy = countsBy(done);
+  const overdueBy = countsBy(overdue);
+
+  const data = users.map((user) => ({
+    ...publicUser(user),
+    totalTasks: totalBy.get(user.id) || 0,
+    doneTasks: doneBy.get(user.id) || 0,
+    overdueTasks: overdueBy.get(user.id) || 0
+  }));
   res.json({ data, permissions: allPermissions, roles });
 }));
 

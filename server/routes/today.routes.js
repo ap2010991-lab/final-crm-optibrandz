@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
+const { retainerClientsDue } = require("../utils/retainerRun");
 
 const router = express.Router();
 
@@ -33,21 +34,11 @@ router.get("/", asyncRoute(async (req, res) => {
   const weekEnd = new Date(today.getTime() + 7 * 86400000);
   const { start: monthStart, end: monthEnd } = monthBounds();
 
-  const [retainerClients, invoicedThisMonth, overdueInvoices, contentDue, plannedThisMonth, postedThisMonth, activeClients, renewals, staleLeads] =
+  const [toRaise, overdueInvoices, contentDue, plannedThisMonth, postedThisMonth, activeClients, renewals, staleLeads] =
     await Promise.all([
-      // Clients on a monthly retainer are the basis of the billing run.
-      can(user, "invoices")
-        ? prisma.client.findMany({
-            where: { status: { in: ["ACTIVE", "ONBOARDING"] } },
-            select: { id: true, businessName: true, phone: true, services: { where: { status: "ACTIVE" }, select: { monthlyValue: true } } }
-          })
-        : [],
-      can(user, "invoices")
-        ? prisma.invoice.findMany({
-            where: { createdAt: { gte: monthStart, lt: monthEnd } },
-            select: { clientId: true }
-          })
-        : [],
+      // Shared with POST /invoices/run so the Today screen and the billing run can never
+      // disagree about who still owes a retainer this month.
+      can(user, "invoices") ? retainerClientsDue() : [],
       can(user, "invoices")
         ? prisma.invoice.findMany({
             where: { status: { notIn: ["PAID", "CANCELLED"] }, dueDate: { lt: today } },
@@ -61,7 +52,11 @@ router.get("/", asyncRoute(async (req, res) => {
         : [],
       can(user, "content")
         ? prisma.contentCalendar.findMany({
-            where: { status: { not: "PUBLISHED" }, scheduledDate: { lt: weekEnd } },
+            // Without a lower bound this pulled every unpublished post ever planned, and
+            // the 40-row cap then filled with months-old drafts — measured at 22 of 37 —
+            // so what was actually due this week never reached the screen. A draft older
+            // than the current month is a planning problem, not today's work.
+            where: { status: { not: "PUBLISHED" }, scheduledDate: { gte: monthStart, lt: weekEnd } },
             select: {
               id: true, platform: true, postType: true, status: true, scheduledDate: true, caption: true,
               designBrief: true, mediaUrl: true,
@@ -111,16 +106,6 @@ router.get("/", asyncRoute(async (req, res) => {
           })
         : []
     ]);
-
-  const invoicedClientIds = new Set(invoicedThisMonth.map((invoice) => invoice.clientId));
-  const toRaise = retainerClients
-    .map((client) => ({
-      id: client.id,
-      businessName: client.businessName,
-      phone: client.phone,
-      amount: client.services.reduce((sum, service) => sum + Number(service.monthlyValue || 0), 0)
-    }))
-    .filter((client) => client.amount > 0 && !invoicedClientIds.has(client.id));
 
   const plannedByClient = new Map(plannedThisMonth.map((row) => [row.clientId, row._count._all]));
   const postedByClient = new Map(postedThisMonth.map((row) => [row.clientId, row._count._all]));

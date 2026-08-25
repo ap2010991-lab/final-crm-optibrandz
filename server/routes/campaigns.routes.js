@@ -2,40 +2,32 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
+const { Platform } = require("../utils/enums");
 
 const router = express.Router();
 
-const campaignSchema = z.object({
-  clientId: z.string(),
-  month: z.number(),
-  year: z.number(),
-  platform: z.string(),
-  adSpend: z.number().optional(),
-  leadsGenerated: z.number().optional(),
-  impressions: z.number().optional(),
-  clicks: z.number().optional(),
-  ctr: z.number().optional(),
-  cpl: z.number().optional(),
-  seoKeywords: z.any().optional(),
-  followerGrowth: z.number().optional(),
-  reach: z.number().optional(),
-  engagement: z.number().optional(),
-  notes: z.string().optional()
-});
-
-const campaignPutSchema = z.object({
-  clientId: z.string().optional(),
-  month: z.number().int().min(1).max(12).optional(),
-  year: z.number().int().min(2000).max(2100).optional(),
-  platform: z.string().optional(),
+// One shape for both POST and PUT. They used to differ, so POST happily accepted
+// month=99 while PUT rejected it, and the report for that month then found nothing.
+const campaignFields = {
+  clientId: z.string().min(1),
+  month: z.number().int().min(1).max(12),
+  year: z.number().int().min(2000).max(2100),
+  platform: Platform,
   adSpend: z.number().min(0).optional(),
   leadsGenerated: z.number().int().min(0).optional(),
   impressions: z.number().int().min(0).optional(),
   clicks: z.number().int().min(0).optional(),
   ctr: z.number().min(0).optional(),
   cpl: z.number().min(0).optional(),
+  seoKeywords: z.any().optional(),
+  followerGrowth: z.number().int().optional(),
+  reach: z.number().int().min(0).optional(),
+  engagement: z.number().min(0).optional(),
   notes: z.string().max(2000).optional()
-});
+};
+
+const campaignSchema = z.object(campaignFields);
+const campaignPutSchema = z.object(campaignFields).partial();
 
 router.get("/", asyncRoute(async (req, res) => {
   const data = await prisma.campaignLog.findMany({
@@ -51,6 +43,8 @@ router.get("/", asyncRoute(async (req, res) => {
 
 router.post("/", asyncRoute(async (req, res) => {
   const body = campaignSchema.parse(req.body);
+  const client = await prisma.client.findUnique({ where: { id: body.clientId } });
+  if (!client) return res.status(422).json({ message: "Choose a client for this campaign." });
   const item = await prisma.campaignLog.create({ data: body });
   res.status(201).json({ data: item });
 }));

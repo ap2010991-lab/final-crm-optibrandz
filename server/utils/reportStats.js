@@ -1,4 +1,5 @@
 const prisma = require("../db/prisma");
+const { publishedInMonth } = require("./publishedPosts");
 
 const countBy = (rows, key) => rows.reduce((acc, row) => ({ ...acc, [row[key]]: (acc[row[key]] || 0) + 1 }), {});
 
@@ -17,12 +18,9 @@ const toRows = (counts) => Object.entries(counts)
  * can never be looking at two different sets of numbers.
  */
 async function buildReportStats(report) {
-  const monthStart = new Date(report.year, report.month - 1, 1);
-  const monthEnd = new Date(report.year, report.month, 1);
-
   const [posted, campaigns, services] = await Promise.all([
     prisma.contentCalendar.findMany({
-      where: { clientId: report.clientId, status: "PUBLISHED", scheduledDate: { gte: monthStart, lt: monthEnd } },
+      where: publishedInMonth(report.clientId, report.month, report.year),
       select: { platform: true, postType: true }
     }),
     prisma.campaignLog.findMany({

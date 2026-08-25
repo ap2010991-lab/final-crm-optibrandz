@@ -1,10 +1,11 @@
 const express = require("express");
 const { z } = require("zod");
 const prisma = require("../db/prisma");
-const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { onlyProvided } = require("../utils/onlyProvided");
 const { uploadPostImage, removePostImage, isConfigured, backendName } = require("../utils/mediaStorage");
+const { Platform, PostType, ContentStatus } = require("../utils/enums");
+const { isAllowedImage, allowedList } = require("../utils/imageTypes");
 
 const multer = require("multer");
 
@@ -13,19 +14,21 @@ const router = express.Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 4 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith("image/"))
+  // `image/*` also matched image/svg+xml, which is a script-capable XML document served
+  // back on this origin. Only the raster formats a creative actually needs are accepted.
+  fileFilter: (_req, file, cb) => cb(null, isAllowedImage(file.mimetype))
 });
 
 const calendarSchema = z.object({
   clientId: z.string(),
   month: z.number(),
   year: z.number(),
-  platform: z.string().default("INSTAGRAM"),
-  postType: z.string().default("STATIC"),
+  platform: Platform.default("INSTAGRAM"),
+  postType: PostType.default("STATIC"),
   caption: z.string().optional(),
   designBrief: z.string().optional(),
   scheduledDate: z.string().optional(),
-  status: z.string().default("DRAFT"),
+  status: ContentStatus.default("DRAFT"),
   mediaUrl: z.string().optional()
 });
 
@@ -69,7 +72,7 @@ router.post("/bulk", asyncRoute(async (req, res) => {
     month: z.number().int().min(1).max(12),
     year: z.number().int().min(2000).max(2100),
     count: z.number().int().min(1).max(60).default(26),
-    platform: z.string().default("INSTAGRAM")
+    platform: Platform.default("INSTAGRAM")
   }).parse(req.body);
 
   const client = await prisma.client.findUnique({ where: { id: body.clientId } });
@@ -104,21 +107,26 @@ router.post("/bulk", asyncRoute(async (req, res) => {
 
 router.put("/:id", asyncRoute(async (req, res) => {
   const body = onlyProvided(req.body, calendarSchema.partial().parse(req.body));
-  const item = await prisma.contentCalendar.update({
-    where: { id: req.params.id },
-    data: { ...body, ...(body.scheduledDate ? { scheduledDate: new Date(body.scheduledDate) } : {}) }
-  });
-  res.json({ data: item });
-}));
-
-// Approval was locked to CLIENT logins only, which meant the agency could never
-// approve its own drafts and the button had no working path in the UI.
-router.put("/:id/approve", requireRole(["CLIENT", "OWNER", "ACCOUNT_MANAGER"]), asyncRoute(async (req, res) => {
   const current = await prisma.contentCalendar.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ message: "Content item not found" });
+
+  // approvedAt and publishedAt existed but nothing ever wrote them: the UI advances a
+  // post with a plain status PUT, and the one route that stamped approvedAt was never
+  // called from anywhere. Reports therefore had to use the *scheduled* date as a stand-in
+  // for when a post actually went out, which is wrong whenever it slipped a day.
+  const stamps = {};
+  if (body.status === "APPROVED" && !current.approvedAt) stamps.approvedAt = new Date();
+  if (body.status === "PUBLISHED" && !current.publishedAt) stamps.publishedAt = new Date();
+  // Moving a post back out of published means it did not go out after all.
+  if (body.status && body.status !== "PUBLISHED" && current.publishedAt) stamps.publishedAt = null;
+
   const item = await prisma.contentCalendar.update({
-    where: { id: req.params.id },
-    data: { status: "APPROVED", approvedAt: new Date() }
+    where: { id: current.id },
+    data: {
+      ...body,
+      ...stamps,
+      ...(body.scheduledDate ? { scheduledDate: new Date(body.scheduledDate) } : {})
+    }
   });
   res.json({ data: item });
 }));
@@ -126,7 +134,12 @@ router.put("/:id/approve", requireRole(["CLIENT", "OWNER", "ACCOUNT_MANAGER"]), 
 // Anyone with the content permission can attach the creative — that is the designer's
 // whole job here. Approving it stays with the owner and account managers.
 router.post("/:id/media", upload.single("image"), asyncRoute(async (req, res) => {
-  if (!req.file) return res.status(422).json({ message: "Choose an image under 4 MB." });
+  if (!req.file) return res.status(422).json({ message: `Choose a ${allowedList()} image under 4 MB.` });
+  // Belt and braces: multer's filter already rejected it, but the stored mime type is
+  // what gets echoed back as a Content-Type, so it is checked again before it is kept.
+  if (!isAllowedImage(req.file.mimetype)) {
+    return res.status(422).json({ message: `That file type is not supported. Use ${allowedList()}.` });
+  }
   const current = await prisma.contentCalendar.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ message: "Content item not found" });
 

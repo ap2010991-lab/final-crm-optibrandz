@@ -77,7 +77,10 @@ async function buildActionNotifications(user) {
     can(user, "content")
       ? prisma.contentCalendar.findMany({
           where: {
-            status: { in: ["DRAFT", "REVIEW"] },
+            // Was DRAFT/REVIEW. REVIEW was dropped from the pipeline long ago, and
+            // IN_DESIGN and APPROVED are most of it, so a post due today that had been
+            // started or signed off never raised anything.
+            status: { not: "PUBLISHED" },
             scheduledDate: { gte: dayStart, lte: dayEnd },
             ...(user.role === "CLIENT" ? { clientId: user.clientId || "__none__" } : {})
           },
@@ -137,7 +140,7 @@ async function buildActionNotifications(user) {
     title: "Content scheduled today",
     message: `${item.client?.businessName || "Client"} · ${item.platform} ${item.postType} · ${item.status}`,
     link: `/content?clientId=${item.clientId}`, dueAt: item.scheduledDate, isRead: false,
-    priority: item.status === "REVIEW" ? "HIGH" : "MEDIUM"
+    priority: item.status === "APPROVED" ? "HIGH" : "MEDIUM"
   }));
 
   return items.sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
@@ -153,7 +156,13 @@ router.get("/", asyncRoute(async (req, res) => {
     }),
     buildActionNotifications(req.user)
   ]);
-  res.json({ data: [...actionItems, ...saved].slice(0, 50), meta: { actionCount: actionItems.length } });
+  // `savedCount` lets the panel offer "Mark all read" only when there is something a
+  // read flag can actually clear. Live items are cleared by doing the work, not by
+  // dismissing them, and the button used to promise otherwise.
+  res.json({
+    data: [...actionItems, ...saved].slice(0, 50),
+    meta: { actionCount: actionItems.length, savedCount: saved.length }
+  });
 }));
 
 router.put("/read-all", asyncRoute(async (req, res) => {

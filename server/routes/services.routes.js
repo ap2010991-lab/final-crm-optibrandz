@@ -4,16 +4,17 @@ const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { onlyProvided } = require("../utils/onlyProvided");
+const { ServiceType, ServiceStatus } = require("../utils/enums");
 
 const router = express.Router();
 
 const serviceSchema = z.object({
   clientId: z.string(),
-  serviceType: z.string(),
-  packageName: z.string().optional(),
-  monthlyValue: z.number(),
+  serviceType: ServiceType,
+  packageName: z.string().max(120).optional(),
+  monthlyValue: z.number().min(0).max(100_000_000),
   startDate: z.string().optional(),
-  status: z.string().default("ACTIVE"),
+  status: ServiceStatus.default("ACTIVE"),
   deliverables: z.any().optional()
 });
 

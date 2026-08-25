@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
+const { TaskStatus, Priority } = require("../utils/enums");
 
 const router = express.Router();
 
@@ -11,14 +12,14 @@ const taskSchema = z.object({
   serviceOrderId: z.string().optional().nullable(),
   assignedToId: z.string(),
   dueDate: z.string(),
-  priority: z.string().default("MEDIUM"),
-  status: z.string().default("PENDING")
+  priority: Priority.default("MEDIUM"),
+  status: TaskStatus.default("PENDING")
 });
 
 const taskPutSchema = z.object({
   title: z.string().optional(),
-  status: z.string().optional(),
-  priority: z.string().optional(),
+  status: TaskStatus.optional(),
+  priority: Priority.optional(),
   dueDate: z.string().optional(),
   assignedToId: z.string().optional()
 });

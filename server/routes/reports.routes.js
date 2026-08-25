@@ -4,6 +4,8 @@ const prisma = require("../db/prisma");
 const asyncRoute = require("../utils/asyncRoute");
 const { streamReportPdf } = require("../utils/reportPdf");
 const { buildReportStats } = require("../utils/reportStats");
+const { publishedInMonth } = require("../utils/publishedPosts");
+const requireRole = require("../middleware/requireRole");
 
 const router = express.Router();
 
@@ -22,9 +24,6 @@ router.post("/generate", asyncRoute(async (req, res) => {
     nextMonthPlan: z.string().max(2000).optional()
   }).parse(req.body);
 
-  const monthStart = new Date(body.year, body.month - 1, 1);
-  const monthEnd = new Date(body.year, body.month, 1);
-
   // The report used to be boilerplate that read the same whatever had happened. It is now
   // assembled from what was actually delivered in the month, so it is worth sending.
   const [client, campaigns, services, invoices, posted] = await Promise.all([
@@ -36,7 +35,7 @@ router.post("/generate", asyncRoute(async (req, res) => {
     }),
     prisma.invoice.findMany({ where: { clientId: body.clientId } }),
     prisma.contentCalendar.findMany({
-      where: { clientId: body.clientId, status: "PUBLISHED", scheduledDate: { gte: monthStart, lt: monthEnd } },
+      where: publishedInMonth(body.clientId, body.month, body.year),
       select: { platform: true, postType: true }
     })
   ]);
@@ -79,6 +78,9 @@ router.post("/generate", asyncRoute(async (req, res) => {
 
   // The old code stored a pdfUrl pointing at /api/reports/<timestamp>.pdf, a route that
   // never existed. The PDF is now generated on demand from the report id.
+  // Pressing Generate twice used to leave two reports for the same month with no way to
+  // tell which one the client had been sent. The latest wins.
+  await prisma.report.deleteMany({ where: { clientId: body.clientId, month: body.month, year: body.year } });
   const report = await prisma.report.create({
     data: { clientId: body.clientId, month: body.month, year: body.year, summary }
   });
@@ -109,7 +111,9 @@ router.get("/:id/pdf", asyncRoute(async (req, res) => {
   await streamReportPdf(report, await buildReportStats(report), res);
 }));
 
-router.delete("/:id", asyncRoute(async (req, res) => {
+// Every other destructive route is owner-only; this one was not, so anyone with the
+// reports permission could delete a client's published report.
+router.delete("/:id", requireRole(["OWNER"]), asyncRoute(async (req, res) => {
   const current = await prisma.report.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ message: "Report not found" });
   await prisma.report.delete({ where: { id: req.params.id } });

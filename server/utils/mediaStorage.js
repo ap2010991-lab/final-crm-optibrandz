@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const prisma = require("../db/prisma");
+const { extensionFor } = require("./imageTypes");
 
 const BUCKET = "post-media";
 
@@ -35,10 +36,6 @@ function isConfigured() {
 
 function backendName() {
   return usingBucket() ? "supabase-storage" : "database";
-}
-
-function extensionFor(mimeType) {
-  return { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }[mimeType] || "bin";
 }
 
 async function uploadToBucket({ buffer, mimeType, contentId }) {

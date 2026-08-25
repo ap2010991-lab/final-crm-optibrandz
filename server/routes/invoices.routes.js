@@ -5,6 +5,9 @@ const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
 const { onlyProvided } = require("../utils/onlyProvided");
 const { streamInvoicePdf } = require("../utils/invoicePdf");
+const { InvoiceStatus } = require("../utils/enums");
+const { invoiceStatus, round, startOfToday } = require("../utils/invoiceStatus");
+const { retainerClientsDue } = require("../utils/retainerRun");
 
 const router = express.Router();
 
@@ -15,12 +18,10 @@ const invoiceSchema = z.object({
   dueDate: z.string().min(1),
   gstAmount: money.default(0),
   paidAmount: money.default(0),
-  status: z.enum(["PENDING", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"]).optional(),
+  status: InvoiceStatus.optional(),
   clientPhone: z.string().max(30).optional().nullable(),
   notes: z.string().max(2000).optional().nullable()
 });
-
-const round = (value) => Math.round(Number(value || 0) * 100) / 100;
 
 function parseDueDate(value) {
   const date = new Date(value);
@@ -32,8 +33,8 @@ function parseDueDate(value) {
   return date;
 }
 
-// The invoice status is derived from the money, so a half-paid invoice can never be
-// left sitting on PAID. An explicit CANCELLED is always respected.
+// The money is computed here; what the status should be is decided in one place for the
+// write path, the nightly job and the dashboard alike (utils/invoiceStatus).
 function invoiceTotals(body) {
   const amount = round((body.lineItems || []).reduce((sum, item) => sum + Number(item.amount || 0), 0));
   const totalAmount = round(amount + Number(body.gstAmount || 0));
@@ -43,35 +44,31 @@ function invoiceTotals(body) {
     error.status = 422;
     throw error;
   }
-  let status = body.status === "CANCELLED"
-    ? "CANCELLED"
-    : paidAmount >= totalAmount && totalAmount > 0 ? "PAID"
-      : paidAmount > 0 ? "PARTIAL"
-        : "PENDING";
-  if (status === "PENDING" && body.dueDate && new Date(body.dueDate) < startOfToday()) status = "OVERDUE";
+  const status = invoiceStatus({ totalAmount, paidAmount, dueDate: body.dueDate, status: body.status });
   return { amount, totalAmount, paidAmount, status };
 }
 
-function startOfToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-// `count() + 1` produced duplicate numbers when two invoices were created together and
-// re-used numbers after a delete. The number is now derived from the highest number
-// already issued this year. On a unique-constraint collision the highest number is read
-// again rather than skipped, so the series stays gapless for GST filing.
-async function createInvoiceWithNumber(data, attempt = 0) {
-  const year = new Date().getFullYear();
+// Sorting invoice numbers as text ranks "OB-2026-999" above "OB-2026-1000", so past the
+// 999th invoice of a year the next number was computed as one already taken, the unique
+// constraint rejected it, and the retry recomputed the same number 25 times before
+// giving up with a 500. The sequence is now compared as a number.
+async function nextInvoiceNumber(year) {
   const prefix = `OB-${year}-`;
-  const latest = await prisma.invoice.findFirst({
+  const issued = await prisma.invoice.findMany({
     where: { invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: "desc" },
     select: { invoiceNumber: true }
   });
-  const lastSequence = latest ? Number(latest.invoiceNumber.slice(prefix.length)) || 0 : 0;
-  const invoiceNumber = `${prefix}${String(lastSequence + 1).padStart(3, "0")}`;
+  const highest = issued.reduce((max, { invoiceNumber }) => {
+    const sequence = Number(invoiceNumber.slice(prefix.length));
+    return Number.isFinite(sequence) && sequence > max ? sequence : max;
+  }, 0);
+  return `${prefix}${String(highest + 1).padStart(3, "0")}`;
+}
+
+// On a unique-constraint collision the highest number is read again rather than skipped,
+// so the series stays gapless for GST filing.
+async function createInvoiceWithNumber(data, attempt = 0) {
+  const invoiceNumber = await nextInvoiceNumber(new Date().getFullYear());
   try {
     return await prisma.invoice.create({ data: { ...data, invoiceNumber } });
   } catch (error) {
@@ -99,41 +96,6 @@ router.get("/", asyncRoute(async (req, res) => {
   });
   res.json({ data });
 }));
-
-const monthBounds = (now = new Date()) => ({
-  start: new Date(now.getFullYear(), now.getMonth(), 1),
-  end: new Date(now.getFullYear(), now.getMonth() + 1, 1)
-});
-
-// Billing here is fixed monthly retainers on roughly the same date, so "who needs an
-// invoice" is simply: an active client whose live services add up to more than zero and
-// who has no invoice dated in the current month. Deriving it means no billing-run table
-// and no way for the two to disagree — and it makes pressing the button twice harmless,
-// because the first press removes those clients from the list.
-async function retainerClientsDue() {
-  const { start, end } = monthBounds();
-  const [clients, invoiced] = await Promise.all([
-    prisma.client.findMany({
-      where: { status: { in: ["ACTIVE", "ONBOARDING"] } },
-      select: {
-        id: true, businessName: true, phone: true,
-        services: { where: { status: "ACTIVE" }, select: { monthlyValue: true, serviceType: true } }
-      },
-      orderBy: { businessName: "asc" }
-    }),
-    prisma.invoice.findMany({ where: { createdAt: { gte: start, lt: end } }, select: { clientId: true } })
-  ]);
-  const already = new Set(invoiced.map((invoice) => invoice.clientId));
-  return clients
-    .map((client) => ({
-      id: client.id,
-      businessName: client.businessName,
-      phone: client.phone,
-      amount: round(client.services.reduce((sum, service) => sum + Number(service.monthlyValue || 0), 0)),
-      services: client.services.map((service) => service.serviceType)
-    }))
-    .filter((client) => client.amount > 0 && !already.has(client.id));
-}
 
 router.get("/run", asyncRoute(async (_req, res) => {
   const due = await retainerClientsDue();
@@ -163,22 +125,48 @@ router.post("/run", asyncRoute(async (req, res) => {
       paidAmount: 0,
       status: "PENDING",
       dueDate,
-      paidAt: null
+      paidAt: null,
+      isRetainer: true
     }));
   }
   res.status(201).json({ data: created, created: created.length });
 }));
 
-router.get("/revenue", asyncRoute(async (_req, res) => {
-  const invoices = await prisma.invoice.findMany({ orderBy: { createdAt: "asc" } });
-  const data = invoices.reduce((acc, invoice) => {
-    const month = new Date(invoice.createdAt).toLocaleDateString("en-IN", { month: "short" });
-    const row = acc.find((item) => item.month === month) || acc[acc.push({ month, invoiced: 0, collected: 0 }) - 1];
-    row.invoiced += Number(invoice.totalAmount || 0);
-    row.collected += Number(invoice.paidAmount || 0);
-    return acc;
-  }, []);
-  res.json({ data });
+// Grouped by month name alone, August 2025 and August 2026 landed in the same row and
+// the chart silently reported two years of billing as one month. Keyed by year+month,
+// labelled with the year, and bounded to a rolling window so it stays cheap.
+router.get("/revenue", asyncRoute(async (req, res) => {
+  const months = Math.min(Math.max(Number(req.query.months) || 12, 1), 60);
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+
+  const invoices = await prisma.invoice.findMany({
+    where: { createdAt: { gte: from }, status: { not: "CANCELLED" } },
+    select: { totalAmount: true, paidAmount: true, createdAt: true },
+    orderBy: { createdAt: "asc" }
+  });
+
+  // Every month in the window appears, so a gap reads as zero rather than vanishing.
+  const buckets = Array.from({ length: months }, (_, index) => {
+    const date = new Date(from.getFullYear(), from.getMonth() + index, 1);
+    return {
+      key: `${date.getFullYear()}-${date.getMonth()}`,
+      month: date.toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
+      invoiced: 0,
+      collected: 0
+    };
+  });
+  const byKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+
+  invoices.forEach((invoice) => {
+    const created = new Date(invoice.createdAt);
+    const bucket = byKey.get(`${created.getFullYear()}-${created.getMonth()}`);
+    if (!bucket) return;
+    bucket.invoiced = round(bucket.invoiced + Number(invoice.totalAmount || 0));
+    bucket.collected = round(bucket.collected + Number(invoice.paidAmount || 0));
+  });
+
+  res.json({ data: buckets.map(({ key, ...row }) => row) });
 }));
 
 router.post("/", asyncRoute(async (req, res) => {
