@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit3, Plus, Trash2 } from "lucide-react";
+import { Edit3, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { pretty } from "../lib/format";
 import { navItems } from "../lib/nav";
@@ -14,6 +14,7 @@ export default function Team() {
   const { notify } = useToast();
   const [editing, setEditing] = useState(null);
   const [removing, setRemoving] = useState(null);
+  const [restoring, setRestoring] = useState("");
 
   const query = useQuery({ queryKey: ["team"], queryFn: () => api("/team") });
   const members = query.data?.data || [];
@@ -39,6 +40,19 @@ export default function Team() {
     refresh();
   }
 
+  async function restore(member) {
+    setRestoring(member.id);
+    try {
+      await api(`/team/${member.id}`, { method: "PUT", body: JSON.stringify({ isActive: true }) });
+      notify(`${member.name} can sign in again.`);
+      refresh();
+    } catch (error) {
+      notify(error.message, "error");
+    } finally {
+      setRestoring("");
+    }
+  }
+
   const fields = [
     { name: "name", label: "Team member name", required: true, placeholder: "e.g. Rohan Mehta" },
     { name: "email", label: "Login email", kind: "email", required: true, placeholder: "team@optibrandz.in", help: "This email is their CRM username." },
@@ -50,7 +64,17 @@ export default function Team() {
       help: editing?.id ? "Leave blank to keep their current password." : "Share this with them privately, and ask them to change it."
     },
     { name: "phone", label: "Phone / WhatsApp", kind: "phone" },
-    { name: "role", label: "Role", options: roles.filter((role) => role !== "OWNER" && role !== "CLIENT"), required: true },
+    {
+      name: "role",
+      label: "Role",
+      required: true,
+      // OWNER is not offered when creating a login, but it has to appear when editing the
+      // owner — otherwise their own role is missing from the dropdown and the field shows
+      // somebody else's. CLIENT logins are managed with the client, not here.
+      options: roles.filter((role) => role !== "CLIENT" && (role !== "OWNER" || editing?.role === "OWNER")),
+      disabled: editing?.role === "OWNER",
+      help: editing?.role === "OWNER" ? "The owner login always keeps full access." : undefined
+    },
     {
       name: "permissions",
       label: "Sections they can open",
@@ -107,6 +131,12 @@ export default function Team() {
               <button className="table-action" onClick={() => setEditing({ ...member, password: "" })}><Edit3 size={14} /> Edit</button>
               {member.role !== "OWNER" && member.isActive &&
                 <button className="danger-action" onClick={() => setRemoving(member)}><Trash2 size={14} /> Remove login</button>}
+              {/* Removing a colleague was a one-way door: the API could switch a login
+                  back on, but nothing on this screen ever offered it. */}
+              {!member.isActive &&
+                <button className="table-action" disabled={restoring === member.id} onClick={() => restore(member)}>
+                  <RotateCcw size={14} /> {restoring === member.id ? "Restoring..." : "Restore login"}
+                </button>}
             </div>
           </div>;
         })}
