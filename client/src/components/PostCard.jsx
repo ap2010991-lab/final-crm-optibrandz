@@ -98,7 +98,7 @@ export default function PostCard({ post, client, onChanged, readOnly = false, sh
     {!post.caption && post.designBrief && <p className="mt-3 text-sm leading-6 text-zinc-500">{post.designBrief}</p>}
 
     {!readOnly && <>
-      <input ref={fileRef} className="hidden" type="file" accept="image/*" onChange={upload} />
+      <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={upload} />
       {stage.next && <button className="primary mt-3 w-full" onClick={advance} disabled={Boolean(busy)}>
         {stage.next === "PUBLISHED" ? <Check size={16} /> : <ArrowRight size={16} />}
         {busy === "stage" ? "Saving..." : stage.action}

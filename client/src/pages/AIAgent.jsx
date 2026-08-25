@@ -96,7 +96,7 @@ export default function AIAgent() {
         <textarea className="input mt-3 min-h-20" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} />
         <label className="secondary-upload mt-3">
           <UploadCloud size={17} /> {busy === "image" ? "Analysing..." : "Upload image"}
-          <input className="hidden" type="file" accept="image/*" onChange={analyzeImage} disabled={Boolean(busy)} />
+          <input className="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={analyzeImage} disabled={Boolean(busy)} />
         </label>
         {imageAnswer && <Output text={imageAnswer} />}
       </div>
