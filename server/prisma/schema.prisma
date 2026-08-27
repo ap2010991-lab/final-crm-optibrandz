@@ -27,6 +27,8 @@ model User {
   activities    Activity[]
   leads         Lead[]         @relation("AssignedLeads")
   notifications Notification[]
+  contentTasksCreated   ContentTask[] @relation("ContentTaskAuthor")
+  contentTasksCompleted ContentTask[] @relation("ContentTaskCompleter")
 
   @@index([role, isActive])
   @@index([clientId])
@@ -279,6 +281,16 @@ model ContentTask {
   dueDate     DateTime?
   isDone      Boolean         @default(false)
   completedAt DateTime?
+
+  // The list is shared by the whole team, so it records who put a job on it and who
+  // finished it. Both are optional: tasks created before this existed have no author,
+  // and an open task has no completer. SetNull rather than Cascade so removing a
+  // colleague never deletes the record of work they did.
+  createdById   String?
+  createdBy     User?         @relation("ContentTaskAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  completedById String?
+  completedBy   User?         @relation("ContentTaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import Modal from "./Modal";
-import { longDate, pretty, shortDate } from "../lib/format";
+import { firstName, longDate, pretty, shortDate } from "../lib/format";
 import { TASK_TYPES, taskTypeLabel } from "../lib/contentTasks";
 import { useContentTasks } from "../lib/useContentTasks";
 import { useToast } from "../lib/useToast";
@@ -106,7 +106,10 @@ export default function ContentDayModal({ date, clientId, clientName, posts = []
               <p className="todo-title">{task.title}</p>
               <div className="todo-meta">
                 <span className={`todo-type ${task.type.toLowerCase()}`}>{taskTypeLabel(task.type)}</span>
-                {task.isDone && task.completedAt && <span>Posted {shortDate(task.completedAt)}</span>}
+                {task.isDone && task.completedAt && <span>
+                  Posted {shortDate(task.completedAt)}{firstName(task.completedBy) && ` by ${firstName(task.completedBy)}`}
+                </span>}
+                {!task.isDone && firstName(task.createdBy) && <span>Added by {firstName(task.createdBy)}</span>}
               </div>
             </div>
           </li>)}

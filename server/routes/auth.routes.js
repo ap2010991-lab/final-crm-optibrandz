@@ -7,6 +7,7 @@ const prisma = require("../db/prisma");
 const verifyToken = require("../middleware/verifyToken");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
+const { defaultStaffPermissions, clientPermissions } = require("../utils/constants");
 
 const router = express.Router();
 const publicUser = (user) => ({ ...user, password: undefined, failedLoginCount: undefined, lockedUntil: undefined });
@@ -117,10 +118,10 @@ router.post("/invite", verifyToken, requireRole(["OWNER"]), asyncRoute(async (re
   const exists = await prisma.user.findFirst({ where: { email: { equals: body.email, mode: "insensitive" } } });
   if (exists) return res.status(409).json({ message: "That email already has a login." });
 
-  const permissions = body.role === "DESIGNER" ? ["dashboard", "content", "services"]
-    : body.role === "SEO_EXEC" ? ["dashboard", "services", "campaigns"]
-      : body.role === "CLIENT" ? ["portal"]
-        : ["dashboard", "leads", "clients"];
+  const permissions = body.role === "CLIENT" ? clientPermissions
+    : body.role === "DESIGNER" ? [...defaultStaffPermissions, "services"]
+      : body.role === "SEO_EXEC" ? [...defaultStaffPermissions, "services", "campaigns"]
+        : [...defaultStaffPermissions, "leads", "clients"];
   const tempPassword = crypto.randomBytes(9).toString("base64url");
   const user = await prisma.user.create({
     data: {

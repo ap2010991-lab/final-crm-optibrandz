@@ -56,6 +56,8 @@ app.use("/api/leads", verifyToken, requirePermission("leads"), require("./routes
 app.use("/api/clients", verifyToken, requirePermission("clients"), require("./routes/clients.routes"));
 app.use("/api/services", verifyToken, requirePermission("services"), require("./routes/services.routes"));
 app.use("/api/tasks", verifyToken, requirePermission("services"), require("./routes/tasks.routes"));
+// Any colleague may name a client; only the clients section exposes their account.
+app.use("/api/client-options", verifyToken, require("./routes/client-options.routes"));
 app.use("/api/calendar", verifyToken, requirePermission("content"), require("./routes/calendar.routes"));
 app.use("/api/content-tasks", verifyToken, requirePermission("content"), require("./routes/content-tasks.routes"));
 app.use("/api/invoices", verifyToken, requirePermission("invoices"), require("./routes/invoices.routes"));

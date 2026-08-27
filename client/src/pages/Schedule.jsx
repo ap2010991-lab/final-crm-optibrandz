@@ -24,7 +24,9 @@ export default function Schedule() {
   const [approvedOnly, setApprovedOnly] = useState(true);
   const [selectedDay, setSelectedDay] = useState(isThisMonth(month, year) ? today.getDate() : null);
 
-  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  // Not /clients: the content plan is shared with colleagues who have no business
+  // reading contract values, so this asks only for the names it puts in the picker.
+  const clientsQuery = useQuery({ queryKey: ["client-options"], queryFn: () => api("/client-options") });
   const clients = clientsQuery.data?.data || [];
 
   const query = useQuery({

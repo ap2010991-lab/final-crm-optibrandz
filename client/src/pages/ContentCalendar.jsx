@@ -49,7 +49,9 @@ export default function ContentCalendar({ readOnly = false }) {
   const view = readOnly ? "calendar" : tab;
   const [openDay, setOpenDay] = useState(null);
 
-  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  // Not /clients: the content plan is shared with colleagues who have no business
+  // reading contract values, so this asks only for the names it puts in the picker.
+  const clientsQuery = useQuery({ queryKey: ["client-options"], queryFn: () => api("/client-options") });
   const clients = useMemo(() => clientsQuery.data?.data || [], [clientsQuery.data]);
   // Falling back to the first client keeps the picker and the query in step without an
   // effect that writes state during render.

@@ -68,6 +68,11 @@ export const normalizePhone = (value) => {
   return digits;
 };
 
+// Cards are tight and the whole team knows each other by first name, so "Kinjal" beats
+// "Kinjal Patel" against a task title. Returns "" for a task with nobody recorded, which
+// is every task created before the list became shared.
+export const firstName = (person) => String(person?.name || "").trim().split(/\s+/)[0] || "";
+
 export const initials = (value, fallback = "OB") => {
   const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return fallback;

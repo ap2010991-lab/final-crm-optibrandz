@@ -4,7 +4,7 @@ const { z } = require("zod");
 const prisma = require("../db/prisma");
 const requireRole = require("../middleware/requireRole");
 const asyncRoute = require("../utils/asyncRoute");
-const { allPermissions, roles } = require("../utils/constants");
+const { allPermissions, roles, defaultStaffPermissions } = require("../utils/constants");
 const { onlyProvided } = require("../utils/onlyProvided");
 
 const router = express.Router();
@@ -12,7 +12,7 @@ router.use(requireRole(["OWNER"]));
 
 const publicUser = (user) => ({ ...user, password: undefined, failedLoginCount: undefined, lockedUntil: undefined });
 const initials = (name) => name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-const validPermissions = z.array(z.enum([...allPermissions, "portal"])).default(["dashboard"]);
+const validPermissions = z.array(z.enum([...allPermissions, "portal"])).default(defaultStaffPermissions);
 
 router.get("/", asyncRoute(async (_req, res) => {
   const now = new Date();

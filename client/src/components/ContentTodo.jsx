@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, Eraser, ListTodo, Pencil, Plus, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
-import { fromDateInput, shortDate, toDateInput } from "../lib/format";
+import { firstName, fromDateInput, shortDate, toDateInput } from "../lib/format";
 import { isOverdue, startOfToday, TASK_TYPES, taskTypeLabel } from "../lib/contentTasks";
 import { useContentTasks } from "../lib/useContentTasks";
 import { QueryState } from "./QueryState";
@@ -103,7 +103,13 @@ export default function ContentTodo({ clientId, clientName }) {
           {task.dueDate && !task.isDone && <span className={overdue ? "todo-overdue" : ""}>
             {overdue ? `Overdue ${shortDate(task.dueDate)}` : shortDate(task.dueDate)}
           </span>}
-          {task.isDone && task.completedAt && <span>Posted {shortDate(task.completedAt)}</span>}
+          {/* On a list four people share, the useful facts are who asked for a job and
+              who actually got it out. Tasks from before the list was shared have neither
+              recorded, so both are shown only when there is a name. */}
+          {task.isDone && task.completedAt && <span>
+            Posted {shortDate(task.completedAt)}{firstName(task.completedBy) && ` by ${firstName(task.completedBy)}`}
+          </span>}
+          {!task.isDone && firstName(task.createdBy) && <span>Added by {firstName(task.createdBy)}</span>}
         </div>
         {task.notes && <p className="todo-notes">{task.notes}</p>}
       </div>

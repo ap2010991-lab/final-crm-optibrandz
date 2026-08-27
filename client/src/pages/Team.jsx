@@ -27,6 +27,8 @@ export default function Team() {
   };
 
   async function saveMember(payload) {
+    // An empty tick list would otherwise send [] and Zod would fill in the shared default,
+    // quietly re-granting what the owner had just cleared.
     const body = { ...payload, permissions: payload.permissions?.length ? payload.permissions : ["dashboard"] };
     if (editing?.id && !body.password) delete body.password;
     if (!editing?.id && (!body.password || body.password.length < 6)) {
@@ -93,7 +95,7 @@ export default function Team() {
         <p className="mt-1 text-xs font-semibold text-zinc-500">Create a login per team member and control exactly what they can open.</p>
       </div>
       <button className="primary" onClick={() => setEditing({
-        name: "", email: "", password: "", phone: "", role: "ACCOUNT_MANAGER", permissions: ["dashboard"]
+        name: "", email: "", password: "", phone: "", role: "ACCOUNT_MANAGER", permissions: ["dashboard", "content"]
       })}><Plus size={16} /> Add team login</button>
     </div>
 

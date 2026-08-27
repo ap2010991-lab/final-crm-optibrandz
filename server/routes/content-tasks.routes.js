@@ -37,6 +37,13 @@ function parseDueDate(value) {
 // Postgres sorts NULLs last on ASC by default, which is exactly that.
 const ORDER = [{ isDone: "asc" }, { dueDate: "asc" }, { createdAt: "asc" }];
 
+// The list is shared, so each row carries who added it and who finished it. Only the
+// three fields the card actually renders — a task must never ship a whole user row.
+const WITH_PEOPLE = {
+  createdBy: { select: { id: true, name: true, avatar: true } },
+  completedBy: { select: { id: true, name: true, avatar: true } }
+};
+
 router.get("/", asyncRoute(async (req, res) => {
   const { clientId, done } = req.query;
   if (!clientId) return res.status(422).json({ message: "Choose a client first." });
@@ -46,7 +53,8 @@ router.get("/", asyncRoute(async (req, res) => {
       clientId: String(clientId),
       ...(done === "true" ? { isDone: true } : done === "false" ? { isDone: false } : {})
     },
-    orderBy: ORDER
+    orderBy: ORDER,
+    include: WITH_PEOPLE
   });
 
   res.json({
@@ -69,8 +77,11 @@ router.post("/", asyncRoute(async (req, res) => {
       ...body,
       notes: body.notes || null,
       dueDate: parseDueDate(body.dueDate),
-      completedAt: body.isDone ? new Date() : null
-    }
+      createdById: req.user.id,
+      completedAt: body.isDone ? new Date() : null,
+      completedById: body.isDone ? req.user.id : null
+    },
+    include: WITH_PEOPLE
   });
   res.status(201).json({ data: task });
 }));
@@ -88,10 +99,16 @@ router.put("/:id", asyncRoute(async (req, res) => {
       ...("dueDate" in body ? { dueDate: parseDueDate(body.dueDate) } : {}),
       // Un-ticking a task has to clear completedAt too, otherwise it still reads as
       // finished everywhere the date is what gets shown.
+      // Re-opening a task clears both the date and the name, so a finished one always
+      // says who finished it and an open one never claims someone did.
       ...("isDone" in body
-        ? { completedAt: body.isDone ? current.completedAt || new Date() : null }
+        ? {
+          completedAt: body.isDone ? current.completedAt || new Date() : null,
+          completedById: body.isDone ? current.completedById || req.user.id : null
+        }
         : {})
-    }
+    },
+    include: WITH_PEOPLE
   });
   res.json({ data: task });
 }));
@@ -105,7 +122,12 @@ router.put("/:id/toggle", asyncRoute(async (req, res) => {
   const isDone = !current.isDone;
   const task = await prisma.contentTask.update({
     where: { id: current.id },
-    data: { isDone, completedAt: isDone ? new Date() : null }
+    data: {
+      isDone,
+      completedAt: isDone ? new Date() : null,
+      completedById: isDone ? req.user.id : null
+    },
+    include: WITH_PEOPLE
   });
   res.json({ data: task });
 }));
