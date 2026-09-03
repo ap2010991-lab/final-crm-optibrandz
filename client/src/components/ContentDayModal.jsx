@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { CalendarCog, Check, ChevronRight, Plus } from "lucide-react";
 import Modal from "./Modal";
 import { firstName, longDate, pretty, shortDate } from "../lib/format";
 import { TASK_TYPES, taskTypeLabel } from "../lib/contentTasks";
+import { postEntry, taskEntry } from "../lib/calendarEntries";
 import { useContentTasks } from "../lib/useContentTasks";
 import { useToast } from "../lib/useToast";
 
@@ -12,8 +13,12 @@ import { useToast } from "../lib/useToast";
  * Reached by tapping a date on the content calendar. Planning a month is done a day at a
  * time — "the 26th gets a reel, a story and the offer post" — so the date is fixed by
  * where you tapped and never has to be typed.
+ *
+ * Everything listed here can also be sent to another day or taken off the plan. That is
+ * `onPick`'s job rather than this sheet's: a post and a to-do are different records
+ * behind different routes, and the page that owns both hands back one sheet for either.
  */
-export default function ContentDayModal({ date, clientId, clientName, posts = [], onClose, readOnly = false }) {
+export default function ContentDayModal({ date, clientId, clientName, posts = [], onPick, onClose, readOnly = false }) {
   const { notify } = useToast();
   const titleRef = useRef(null);
   const [type, setType] = useState("REEL");
@@ -112,6 +117,15 @@ export default function ContentDayModal({ date, clientId, clientName, posts = []
                 {!task.isDone && firstName(task.createdBy) && <span>Added by {firstName(task.createdBy)}</span>}
               </div>
             </div>
+
+            {!readOnly && onPick && <div className="todo-actions">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`Move or remove "${task.title}"`}
+                onClick={() => onPick(taskEntry(task))}
+              ><CalendarCog size={15} /></button>
+            </div>}
           </li>)}
         </ul>
       </div>}
@@ -120,8 +134,16 @@ export default function ContentDayModal({ date, clientId, clientName, posts = []
         <h3 className="section-title">Scheduled posts</h3>
         <ul className="day-post-list mt-2">
           {posts.map((post) => <li key={post.id}>
-            <span>{pretty(post.platform)} · {pretty(post.postType)}</span>
-            <span className="day-post-status">{pretty(post.status)}</span>
+            {readOnly || !onPick
+              ? <>
+                <span>{pretty(post.platform)} · {pretty(post.postType)}</span>
+                <span className="day-post-status">{pretty(post.status)}</span>
+              </>
+              : <button type="button" className="day-post-open" onClick={() => onPick(postEntry(post))}>
+                <span>{pretty(post.platform)} · {pretty(post.postType)}</span>
+                <span className="day-post-status">{pretty(post.status)}</span>
+                <ChevronRight size={16} className="day-post-chevron" />
+              </button>}
           </li>)}
         </ul>
       </div>}

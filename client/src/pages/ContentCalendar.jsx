@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { DndContext, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ListTodo, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { monthLabel, pretty, toDateInput } from "../lib/format";
+import { monthLabel, pretty, shortDate, toDateInput } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import RecordModal, { ConfirmModal } from "../components/RecordModal";
 import { CONTENT_STAGES } from "../lib/contentStages";
 import { tasksByDay, taskTypeLabel } from "../lib/contentTasks";
+import { findEntry, postEntry, taskEntry } from "../lib/calendarEntries";
 import PostCard from "../components/PostCard";
 import ContentTodo from "../components/ContentTodo";
 import ContentDayModal from "../components/ContentDayModal";
+import CalendarItemSheet from "../components/CalendarItemSheet";
 import { useContentTasks } from "../lib/useContentTasks";
 import { useToast } from "../lib/useToast";
 
@@ -48,6 +51,17 @@ export default function ContentCalendar({ readOnly = false }) {
   const [tab, setTab] = useState(readStoredTab);
   const view = readOnly ? "calendar" : tab;
   const [openDay, setOpenDay] = useState(null);
+  // The one chip whose date or existence is being changed. Holds the flattened shape from
+  // calendarEntries, so the sheet does not care whether it came from a post or a to-do.
+  const [acting, setActing] = useState(null);
+
+  // A plain click must still open the sheet, so a drag only begins after the pointer has
+  // actually travelled. Touch needs its own hold delay or iOS reads the gesture as a
+  // scroll and the chip never leaves the cell.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
 
   // Not /clients: the content plan is shared with colleagues who have no business
   // reading contract values, so this asks only for the names it puts in the picker.
@@ -58,8 +72,9 @@ export default function ContentCalendar({ readOnly = false }) {
   const clientId = chosenClientId || clients[0]?.id || "";
   const activeClient = useMemo(() => clients.find((entry) => entry.id === clientId), [clients, clientId]);
 
+  const calendarKey = useMemo(() => ["calendar", clientId, month, year], [clientId, month, year]);
   const query = useQuery({
-    queryKey: ["calendar", clientId, month, year],
+    queryKey: calendarKey,
     queryFn: () => api(`/calendar?clientId=${encodeURIComponent(clientId)}&month=${month}&year=${year}`),
     enabled: Boolean(clientId) && view === "calendar"
   });
@@ -68,7 +83,7 @@ export default function ContentCalendar({ readOnly = false }) {
   // Shared with the To-do tab, so ticking a task off there is reflected here without a
   // second round trip. Disabled for the client portal: the agency's work list is not
   // something a client should be shown, so it is never even requested.
-  const { tasks } = useContentTasks(clientId, { enabled: view === "calendar" && !readOnly });
+  const { tasks, patch: patchTask, remove: removeTask } = useContentTasks(clientId, { enabled: view === "calendar" && !readOnly });
   const taskDays = useMemo(() => tasksByDay(tasks, month, year), [tasks, month, year]);
 
   const grid = useMemo(() => buildMonthGrid(month, year, items, taskDays), [month, year, items, taskDays]);
@@ -126,11 +141,72 @@ export default function ContentCalendar({ readOnly = false }) {
     }
   }
 
+  // The grid is the only place a post's date is visible, so a chip dragged to the 12th has
+  // to be on the 12th before the request comes back — otherwise the drag looks like it
+  // was refused. A real refusal puts the month back exactly as it was and re-throws, so
+  // whichever sheet asked can say why.
+  async function patchPost(post, changes) {
+    const previous = queryClient.getQueryData(calendarKey);
+    queryClient.setQueryData(calendarKey, (current) => current && {
+      ...current,
+      data: current.data.map((entry) => entry.id === post.id ? { ...entry, ...changes } : entry)
+    });
 
-  async function deleteItem(item) {
-    await api(`/calendar/${item.id}`, { method: "DELETE" });
-    notify("Post removed.");
-    refresh();
+    try {
+      await api(`/calendar/${post.id}`, { method: "PUT", body: JSON.stringify(changes) });
+      refresh();
+    } catch (error) {
+      queryClient.setQueryData(calendarKey, previous);
+      throw error;
+    }
+  }
+
+  async function deletePost(post) {
+    const previous = queryClient.getQueryData(calendarKey);
+    queryClient.setQueryData(calendarKey, (current) => current && {
+      ...current,
+      data: current.data.filter((entry) => entry.id !== post.id)
+    });
+
+    try {
+      await api(`/calendar/${post.id}`, { method: "DELETE" });
+      refresh();
+    } catch (error) {
+      queryClient.setQueryData(calendarKey, previous);
+      throw error;
+    }
+  }
+
+  // month and year are not decoration on a post: they record which plan it belongs to and
+  // are what "Fill month" counts against, so a post moved into October has to stop being
+  // one of September's twenty-six.
+  function moveEntry(entry, iso) {
+    if (entry.kind === "task") return patchTask(entry.record, { dueDate: iso });
+    const date = new Date(iso);
+    return patchPost(entry.record, {
+      scheduledDate: iso,
+      month: date.getMonth() + 1,
+      year: date.getFullYear()
+    });
+  }
+
+  const deleteEntry = (entry) => entry.kind === "task"
+    ? removeTask(entry.record)
+    : deletePost(entry.record);
+
+  // Dropping a chip on a day has no sheet to report into, so the toast carries both the
+  // confirmation and the failure.
+  async function dropOnDay(dragId, day) {
+    const entry = findEntry(dragId, items, tasks);
+    if (!entry) return;
+    const iso = new Date(year, month - 1, day, 12).toISOString();
+    if (toDateInput(entry.date) === toDateInput(iso)) return;
+    try {
+      await moveEntry(entry, iso);
+      notify(`Moved to ${shortDate(iso)}.`);
+    } catch (error) {
+      notify(error.message, "error");
+    }
   }
 
   const fields = [
@@ -192,47 +268,41 @@ export default function ContentCalendar({ readOnly = false }) {
           <div className="panel">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="section-title">{monthLabel(month, year)}</h2>
+              {/* The chips only exist from 1024px up, so only that width is told to drag
+                  them. A phone gets the sentence that matches what it can actually see. */}
               {!readOnly && <span className="text-xs font-semibold text-zinc-500">
-                Tap a date to add a reel, post or story to it.
+                <span className="lg:hidden">Tap a date to add to it, or to move and remove what is on it.</span>
+                <span className="hidden lg:inline">Tap a date to add to it. Drag a chip to another day to move it, or tap the chip to move or remove it.</span>
               </span>}
             </div>
 
             <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-zinc-400">
               {WEEKDAYS.map((day) => <div key={day}>{day}</div>)}
             </div>
-            <div className="mt-1 grid grid-cols-7 gap-1 lg:gap-2">
-              {grid.map((cell, index) => {
-                if (!cell) return <div key={`pad-${index}`} className="calendar-cell empty" />;
-                const count = cell.items.length + cell.tasks.length;
-                return <div key={cell.day} className="calendar-cell">
-                  <button
-                    type="button"
-                    className={`calendar-day ${isToday(cell.day, month, year) ? "is-today" : ""}`}
-                    onClick={() => !readOnly && setOpenDay(cell.day)}
-                    disabled={readOnly}
-                    aria-label={`${cell.day} ${monthLabel(month, year)}, ${count} planned`}
-                  >
-                    <span className="calendar-day-number">{cell.day}</span>
-                    {count > 0 && <span className="calendar-day-count">{count}</span>}
-                  </button>
-
-                  <div className="calendar-cell-items">
-                    {cell.items.map((item) => <button
-                      key={item.id}
-                      className={`calendar-chip ${item.status.toLowerCase()}`}
-                      onClick={() => !readOnly && setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}
-                    >{pretty(item.platform).slice(0, 4)} · {pretty(item.postType).slice(0, 6)}</button>)}
-                    {/* Rendered as text, not a button: the cell reports what is due, and the
-                        date above opens the sheet where a to-do is added and ticked off. */}
-                    {cell.tasks.map((task) => <span
-                      key={task.id}
-                      title={task.title}
-                      className={`calendar-chip task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
-                    >{taskTypeLabel(task.type)} · {task.title}</span>)}
-                  </div>
-                </div>;
-              })}
-            </div>
+            {/* Dragging a chip onto a date is the gesture a calendar owes you, and it is
+                the whole feature on a desktop. The chips are hidden below 1024px, so a
+                phone never starts a drag and moves things through the sheet instead. */}
+            <DndContext
+              sensors={sensors}
+              onDragEnd={(event) => {
+                const day = Number(String(event.over?.id || "").replace("day-", ""));
+                if (event.active?.id && day) dropOnDay(event.active.id, day);
+              }}
+            >
+              <div className="mt-1 grid grid-cols-7 gap-1 lg:gap-2">
+                {grid.map((cell, index) => cell
+                  ? <DayCell
+                    key={cell.day}
+                    cell={cell}
+                    month={month}
+                    year={year}
+                    readOnly={readOnly}
+                    onOpenDay={setOpenDay}
+                    onPick={setActing}
+                  />
+                  : <div key={`pad-${index}`} className="calendar-cell empty" />)}
+              </div>
+            </DndContext>
           </div>
 
           {/* The grid carries the dates; the cards below carry the creatives, which only
@@ -250,6 +320,9 @@ export default function ContentCalendar({ readOnly = false }) {
                 <button className="table-action" onClick={() => setEditing({ ...item, scheduledDate: toDateInput(item.scheduledDate) })}>
                   Edit caption &amp; brief
                 </button>
+                <button className="table-action" onClick={() => setActing(postEntry(item))}>
+                  <CalendarDays size={14} /> Move
+                </button>
                 <button className="danger-action" onClick={() => setDeleting(item)}><Trash2 size={14} /> Remove</button>
               </div>}
             </div>)}
@@ -263,7 +336,23 @@ export default function ContentCalendar({ readOnly = false }) {
       clientId={clientId}
       clientName={activeClient?.businessName}
       posts={openCell.items}
+      onPick={setActing}
       onClose={() => setOpenDay(null)}
+    />}
+
+    {/* Rendered after the day sheet so it lands on top when one is opened from the other;
+        both backdrops share a z-index and DOM order settles it. */}
+    {acting && !readOnly && <CalendarItemSheet
+      entry={acting}
+      onMove={(iso) => moveEntry(acting, iso)}
+      onDelete={() => deleteEntry(acting)}
+      onEdit={acting.kind === "post"
+        ? () => {
+          setEditing({ ...acting.record, scheduledDate: toDateInput(acting.record.scheduledDate) });
+          setActing(null);
+        }
+        : null}
+      onClose={() => setActing(null)}
     />}
 
     {editing && <RecordModal
@@ -277,10 +366,80 @@ export default function ContentCalendar({ readOnly = false }) {
       title="Remove post"
       message={`Remove this ${pretty(deleting.platform)} ${pretty(deleting.postType)} from the plan?`}
       confirmLabel="Remove post"
-      onConfirm={() => deleteItem(deleting)}
+      onConfirm={() => deletePost(deleting)}
       onClose={() => setDeleting(null)}
     />}
   </div>;
+}
+
+/**
+ * One date on the grid, and the drop target for anything dragged onto it.
+ *
+ * The whole cell accepts the drop rather than the date button inside it, so a chip
+ * released anywhere over the box lands on that day.
+ */
+function DayCell({ cell, month, year, readOnly, onOpenDay, onPick }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `day-${cell.day}`, disabled: readOnly });
+  const count = cell.items.length + cell.tasks.length;
+
+  return <div ref={setNodeRef} className={`calendar-cell ${isOver ? "is-drop-target" : ""}`}>
+    <button
+      type="button"
+      className={`calendar-day ${isToday(cell.day, month, year) ? "is-today" : ""}`}
+      onClick={() => !readOnly && onOpenDay(cell.day)}
+      disabled={readOnly}
+      aria-label={`${cell.day} ${monthLabel(month, year)}, ${count} planned`}
+    >
+      <span className="calendar-day-number">{cell.day}</span>
+      {count > 0 && <span className="calendar-day-count">{count}</span>}
+    </button>
+
+    <div className="calendar-cell-items">
+      {cell.items.map((item) => <CalendarChip
+        key={item.id}
+        entry={postEntry(item)}
+        tone={item.status.toLowerCase()}
+        readOnly={readOnly}
+        onPick={onPick}
+      >{pretty(item.platform).slice(0, 4)} · {pretty(item.postType).slice(0, 6)}</CalendarChip>)}
+      {/* To-dos used to be inert text here, on the reasoning that the calendar reports
+          what is due and the To-do tab is where it is changed. That left the one screen
+          showing a reel on the wrong day with no way to fix it, so they drag and open
+          the same sheet as a post. Ticking one off is still the day sheet's job. */}
+      {cell.tasks.map((task) => <CalendarChip
+        key={task.id}
+        entry={taskEntry(task)}
+        tone={`task ${task.type.toLowerCase()} ${task.isDone ? "done" : ""}`}
+        readOnly={readOnly}
+        onPick={onPick}
+      >{taskTypeLabel(task.type)} · {task.title}</CalendarChip>)}
+    </div>
+  </div>;
+}
+
+/**
+ * One post or to-do on a date.
+ *
+ * Both a drag handle and a button: the pointer sensor waits 6px before it calls the
+ * gesture a drag, so a plain tap still falls through to onClick and opens the sheet.
+ */
+function CalendarChip({ entry, tone, readOnly, onPick, children }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: entry.dragId,
+    disabled: readOnly
+  });
+
+  return <button
+    ref={setNodeRef}
+    type="button"
+    title={entry.title}
+    className={`calendar-chip ${tone} ${isDragging ? "is-dragging" : ""}`}
+    style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
+    disabled={readOnly}
+    onClick={() => onPick(entry)}
+    {...listeners}
+    {...attributes}
+  >{children}</button>;
 }
 
 const isToday = (day, month, year) => {

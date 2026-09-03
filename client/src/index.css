@@ -525,6 +525,9 @@ textarea.input { min-height: 84px; }
   padding: 3px;
 }
 .calendar-cell.empty { border-style: dashed; background: transparent; }
+/* A chip is over this day and will land here if released. Same wash as the kanban column
+   it borrows the gesture from, so the two boards read the same way. */
+.calendar-cell.is-drop-target { border-color: var(--ob-orange); background: #fff3ce; }
 .calendar-cell-items { display: none; }
 
 /* On a phone the button is the whole cell, so the tap target is the box you can see
@@ -570,6 +573,23 @@ textarea.input { min-height: 84px; }
 .calendar-chip {
   display: block; width: 100%; border-radius: 6px; background: #eef2ff; color: #3730a3;
   padding: 3px 5px; text-align: left; font-size: 10px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Held by the pointer to be dragged onto another date, so the browser must not turn
+     the press into a text selection. touch-action is deliberately left alone: pinning it
+     to none would stop a finger scrolling the month whenever it happened to land on a
+     chip, and the touch sensor's hold delay already separates a drag from a scroll. */
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.calendar-chip:disabled { cursor: default; }
+/* Lifted out of the cell while it is being carried, or the cell's own overflow clips it
+   the moment it crosses the border. */
+.calendar-chip.is-dragging {
+  position: relative;
+  z-index: 30;
+  cursor: grabbing;
+  opacity: 0.85;
+  box-shadow: 0 8px 20px rgba(9, 9, 9, 0.22);
 }
 .calendar-chip.approved, .calendar-chip.published { background: #dcfce7; color: #166534; }
 .calendar-chip.review { background: #ede9fe; color: #5b21b6; }
@@ -706,13 +726,12 @@ textarea.input { min-height: 84px; }
 .todo-actions .icon-button { width: 32px; height: 32px; min-height: 32px; padding: 0; }
 
 /* ---------- to-dos shown on the content calendar ---------- */
-/* Text, not a button, and visibly lighter than the post chips beside it: the calendar
-   reports what is due on a day, while ticking and editing live on the To-do list tab. */
+/* Visibly lighter than the post chips beside it, and marked down its left edge by kind.
+   It moves and is removed exactly like a post; ticking it off stays on the day sheet. */
 .calendar-chip.task {
   border-left: 3px solid #6366f1;
   background: #f5f3ff;
   color: #4338ca;
-  cursor: default;
 }
 .calendar-chip.task.reel, .calendar-chip.task.video { border-left-color: #db2777; background: #fdf2f8; color: #9d174d; }
 .calendar-chip.task.story { border-left-color: #7c3aed; background: #f5f3ff; color: #5b21b6; }
@@ -741,6 +760,22 @@ textarea.input { min-height: 84px; }
   font-weight: 800;
   color: var(--ob-ink);
 }
+.day-post-list li:has(.day-post-open) { padding: 0; }
+.day-post-open {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+.day-post-open > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.day-post-open:hover { background: #fff3ce; }
+.day-post-chevron { flex: 0 0 auto; color: var(--ob-stone); }
 .day-post-status {
   flex: 0 0 auto;
   border-radius: 999px;
@@ -749,6 +784,25 @@ textarea.input { min-height: 84px; }
   padding: 3px 8px;
   font-size: 11px;
   font-weight: 900;
+}
+
+/* ---------- move / remove sheet ---------- */
+.item-sheet-head {
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #fffdf7;
+  padding: 12px 14px;
+}
+.item-sheet-title { margin: 0; font-size: 15px; font-weight: 900; color: var(--ob-ink); overflow-wrap: anywhere; }
+.item-sheet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ob-stone);
 }
 
 /* ---------- schedule calendar ---------- */
