@@ -54,8 +54,15 @@ export default function Notes() {
   const tab = fromLink && shared.some((note) => note.id === openId) ? "shared" : chosenTab;
 
   function closeReading() {
+    // Arriving from the bell put you on the tab the note lives in. Clearing the parameter
+    // is what closes it, and that would otherwise also drop you back on whichever tab this
+    // device remembers — so the derived tab is committed on the way out and you stay where
+    // you were reading.
+    if (openId) {
+      setChosenTab(tab);
+      setParams({}, { replace: true });
+    }
     setPicked(null);
-    if (openId) setParams({}, { replace: true });
   }
 
   function chooseTab(next) {
