@@ -945,3 +945,102 @@ textarea.input { min-height: 84px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- personal notes ---------- */
+/* Notes are read at a glance and opened one at a time, so they sit in a card grid rather
+   than the dense rows the to-do list uses: a note has a body worth previewing, a to-do
+   does not. */
+.note-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.note-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ob-line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px 16px;
+}
+/* The whole title-and-preview block opens the note, so the tap target is the part you are
+   already looking at rather than a small link under it. */
+.note-open { display: block; width: 100%; text-align: left; }
+.note-title { margin: 0; font-size: 15px; font-weight: 900; color: var(--ob-ink); overflow-wrap: anywhere; }
+.note-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin: 6px 0 0;
+  /* The body is written with line breaks that mean something — a list, a script — so the
+     preview keeps them instead of running it all into one paragraph. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: #78716c;
+}
+.note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ob-stone);
+}
+.note-meta svg { color: var(--ob-orange); }
+.note-from, .note-shared-with { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.note-shared-with { overflow-wrap: anywhere; }
+.note-card .record-card-actions { margin-top: auto; padding-top: 12px; }
+
+/* Reading a note somebody shared: their line breaks, their spacing, no markup. */
+.note-read-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--ob-ink);
+}
+
+.note-share-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.note-share-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--ob-line);
+  border-radius: 14px;
+  background: #fffdf7;
+  padding: 10px 12px;
+  text-align: left;
+}
+.note-share-row.picked { border-color: var(--ob-orange); background: #fff3ce; }
+.note-share-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--ob-orange), var(--ob-yellow));
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ob-black);
+}
+.note-share-body { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; }
+.note-share-name { font-size: 13px; font-weight: 900; color: var(--ob-ink); overflow-wrap: anywhere; }
+.note-share-role { font-size: 11px; font-weight: 800; color: var(--ob-stone); }
+.note-share-tick {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid var(--ob-line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ob-black);
+}
+.note-share-tick.on { border-color: transparent; background: var(--ob-black); color: #fff; }

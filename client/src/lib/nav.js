@@ -1,8 +1,13 @@
-import { Bot, BriefcaseBusiness, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardList, FileText, LayoutDashboard, Megaphone, Settings, Sparkles, Sun, Users } from "lucide-react";
+import { Bot, BriefcaseBusiness, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardList, FileText, LayoutDashboard, Megaphone, NotebookPen, Settings, Sparkles, Sun, Users } from "lucide-react";
 
 // `key` is the permission name checked on both the client and the server.
 export const navItems = [
   { label: "Today", short: "Today", href: "/today", icon: Sun, key: "dashboard" },
+  // No key on purpose. `canAccess` returns true when an item has no permission, and a
+  // note belongs to whoever is logged in rather than to a section of the CRM somebody can
+  // be granted or denied — so everyone sees this without anyone's permissions changing.
+  // Second in the list because a notes page nobody passes daily is one nobody writes in.
+  { label: "Notes", short: "Notes", href: "/notes", icon: NotebookPen },
   { label: "Leads", short: "Leads", href: "/leads", icon: Megaphone, key: "leads" },
   { label: "Clients", short: "Clients", href: "/clients", icon: BriefcaseBusiness, key: "clients" },
   { label: "Invoices", short: "Invoices", href: "/invoices", icon: CircleDollarSign, key: "invoices" },
