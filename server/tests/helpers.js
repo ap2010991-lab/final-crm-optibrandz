@@ -30,9 +30,9 @@ async function stop() {
 /** Wipes every table so each file starts from a known state. */
 async function reset() {
   await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE "ContentTask", "MediaAsset", "Notification", "Report", "Activity",
-      "CampaignLog", "Invoice", "Task", "ServiceOrder", "ContentCalendar", "Client",
-      "Lead", "User", "Settings" RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE "NoteShare", "Note", "ContentTask", "MediaAsset", "Notification",
+      "Report", "Activity", "CampaignLog", "Invoice", "Task", "ServiceOrder",
+      "ContentCalendar", "Client", "Lead", "User", "Settings" RESTART IDENTITY CASCADE;
   `);
 }
 
