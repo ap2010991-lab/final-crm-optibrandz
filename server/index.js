@@ -63,6 +63,15 @@ app.use("/api/content-tasks", verifyToken, requirePermission("content"), require
 app.use("/api/invoices", verifyToken, requirePermission("invoices"), require("./routes/invoices.routes"));
 app.use("/api/campaigns", verifyToken, requirePermission("campaigns"), require("./routes/campaigns.routes"));
 app.use("/api/reports", verifyToken, requirePermission("reports"), require("./routes/reports.routes"));
+// Notes are the one thing here that is nobody's business but the writer's, so they are
+// mounted on requireRole rather than requirePermission. That middleware opens with
+// `if (req.user.role === "OWNER") return next()`, which is right for every CRM section and
+// exactly wrong here: it would hand the owner every private note in the agency. There is
+// also no section permission to hold — a note belongs to whoever is logged in — so the
+// only question worth asking at the door is whether this is a colleague or a client.
+const COLLEAGUES = ["OWNER", "ACCOUNT_MANAGER", "DESIGNER", "SEO_EXEC"];
+app.use("/api/notes", verifyToken, requireRole(COLLEAGUES), require("./routes/notes.routes"));
+app.use("/api/team-options", verifyToken, requireRole(COLLEAGUES), require("./routes/team-options.routes"));
 app.use("/api/notifications", verifyToken, require("./routes/notifications.routes"));
 app.use("/api/search", verifyToken, require("./routes/search.routes"));
 app.use("/api/ai", verifyToken, requirePermission("ai"), require("./routes/ai.routes"));
