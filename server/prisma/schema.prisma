@@ -29,6 +29,8 @@ model User {
   notifications Notification[]
   contentTasksCreated   ContentTask[] @relation("ContentTaskAuthor")
   contentTasksCompleted ContentTask[] @relation("ContentTaskCompleter")
+  notes         Note[]         @relation("NoteOwner")
+  noteShares    NoteShare[]    @relation("NoteReader")
 
   @@index([role, isActive])
   @@index([clientId])
@@ -456,4 +458,41 @@ model Settings {
   bankDetails  Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+/// Somebody's own notes.
+///
+/// Not a second content to-do list. A ContentTask is what the agency owes a client and the
+/// whole team can see it; this is what you owe yourself, and nobody sees it unless you say
+/// so. Deliberately unattached to a Client for that reason.
+model Note {
+  id        String      @id @default(uuid())
+  ownerId   String
+  owner     User        @relation("NoteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String
+  body      String      @default("")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  shares    NoteShare[]
+
+  @@index([ownerId, updatedAt])
+}
+
+/// One person allowed to read one note.
+///
+/// A row per reader rather than a `sharedWithIds String[]` on Note: an array is rewritten
+/// whole, so two shares issued from two devices race and one vanishes with no error — silent
+/// data loss in the one feature whose value is trust. Rows also make double-sharing
+/// impossible in the database rather than in a code check, and give the recipient's list an
+/// indexed lookup and a date to show.
+model NoteShare {
+  id       String   @id @default(uuid())
+  noteId   String
+  note     Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation("NoteReader", fields: [userId], references: [id], onDelete: Cascade)
+  sharedAt DateTime @default(now())
+
+  @@unique([noteId, userId])
+  @@index([userId, sharedAt])
 }
