@@ -25,6 +25,7 @@ export default function Clients() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["client-options"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["services"] });
   };

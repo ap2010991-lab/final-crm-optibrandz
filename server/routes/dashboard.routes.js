@@ -11,7 +11,17 @@ function startOfToday() {
   return date;
 }
 
-router.get("/", asyncRoute(async (_req, res) => {
+function can(user, permission) {
+  return user.role === "OWNER" || (user.permissions || []).includes(permission);
+}
+
+// `dashboard` is on every staff login by default, but this screen used to answer with
+// the agency's MRR, contract values and every invoice regardless — so a newly invited
+// designer could read the books. Each block now asks for the section it comes from,
+// exactly as the Today screen does; a block the caller may not see reads as empty.
+router.get("/", asyncRoute(async (req, res) => {
+  const user = req.user;
+  const none = Promise.resolve([]);
   const now = new Date();
   const today = startOfToday();
   const weekAgo = new Date(now.getTime() - 7 * 86400000);
@@ -20,30 +30,30 @@ router.get("/", asyncRoute(async (_req, res) => {
   // aggregated keeps the response small and the query cheap as the CRM grows.
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const [clients, leads, rawInvoices, tasks, serviceOrders, campaigns, contentAwaitingApproval, users] = await Promise.all([
-    prisma.client.findMany({
+    can(user, "clients") ? prisma.client.findMany({
       select: { id: true, businessName: true, status: true, totalValue: true, advancePaid: true, renewalDate: true }
-    }),
-    prisma.lead.findMany({
+    }) : none,
+    can(user, "leads") ? prisma.lead.findMany({
       select: { id: true, status: true, createdAt: true, followUpDate: true }
-    }),
-    prisma.invoice.findMany({
+    }) : none,
+    can(user, "invoices") ? prisma.invoice.findMany({
       select: { id: true, invoiceNumber: true, status: true, totalAmount: true, paidAmount: true, dueDate: true, createdAt: true },
       orderBy: { createdAt: "desc" }
-    }),
+    }) : none,
     prisma.task.findMany({
       select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedToId: true }
     }),
-    prisma.serviceOrder.findMany({
+    can(user, "clients") ? prisma.serviceOrder.findMany({
       select: { serviceType: true, status: true, monthlyValue: true }
-    }),
-    prisma.campaignLog.findMany({
+    }) : none,
+    !can(user, "campaigns") ? none : prisma.campaignLog.findMany({
       where: { createdAt: { gte: sixMonthsAgo } },
       select: { platform: true, adSpend: true, leadsGenerated: true, cpl: true },
       orderBy: { createdAt: "desc" }
     }),
     // Was counting REVIEW, a stage the pipeline abandoned, so this tile read 0 for ever.
     // IN_DESIGN is where a post actually sits waiting for the owner to sign it off.
-    prisma.contentCalendar.count({ where: { status: "IN_DESIGN" } }),
+    can(user, "content") ? prisma.contentCalendar.count({ where: { status: "IN_DESIGN" } }) : Promise.resolve(0),
     prisma.user.findMany({
       where: { isActive: true, role: { not: "CLIENT" } },
       select: { id: true, name: true, role: true }

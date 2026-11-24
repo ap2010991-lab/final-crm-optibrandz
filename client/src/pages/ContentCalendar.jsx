@@ -111,14 +111,19 @@ export default function ContentCalendar({ readOnly = false }) {
   }
 
   async function saveItem(payload) {
+    // The plan month follows the date, as it does when a chip is dragged. Saving the form
+    // used to stamp the month being viewed, so a post re-dated into October stayed one of
+    // September's posts and "Fill month" counted it against the wrong month.
+    const scheduledDate = payload.scheduledDate || new Date(year, month - 1, 1, 12).toISOString();
+    const planned = new Date(scheduledDate);
     await api(editing?.id ? `/calendar/${editing.id}` : "/calendar", {
       method: editing?.id ? "PUT" : "POST",
       body: JSON.stringify({
         ...payload,
         clientId,
-        month,
-        year,
-        scheduledDate: payload.scheduledDate || new Date(year, month - 1, 1).toISOString()
+        month: planned.getMonth() + 1,
+        year: planned.getFullYear(),
+        scheduledDate
       })
     });
     notify(editing?.id ? "Post updated." : "Post added.");

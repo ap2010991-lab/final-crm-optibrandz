@@ -26,7 +26,7 @@ export default function Campaigns() {
     queryKey: ["campaigns", month, year],
     queryFn: () => api(`/campaigns?month=${month}&year=${year}`)
   });
-  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  const clientsQuery = useQuery({ queryKey: ["client-options"], queryFn: () => api("/client-options") });
   const campaigns = query.data?.data || [];
   const clientOptions = (clientsQuery.data?.data || []).map((client) => ({ value: client.id, label: client.businessName }));
 
@@ -90,8 +90,8 @@ export default function Campaigns() {
       <QueryState query={query} label="campaign results">
         <DataTable
           rows={campaigns}
-          columns={["platform", "adSpend", "impressions", "clicks", { key: "ctr", label: "CTR %" }, "leadsGenerated", { key: "cpl", label: "Cost / lead" }]}
-          title={(row) => pretty(row.platform)}
+          columns={[{ key: "client.businessName", label: "Client" }, "platform", "adSpend", "impressions", "clicks", { key: "ctr", label: "CTR %" }, "leadsGenerated", { key: "cpl", label: "Cost / lead" }]}
+          title={(row) => `${row.client?.businessName || "Client"} · ${pretty(row.platform)}`}
           emptyMessage={`No campaign results logged for ${monthLabel(month, year)}.`}
           action={(row) => <div className="flex flex-wrap gap-2">
             <button className="table-action" onClick={() => setEditing(row)}><Edit3 size={14} /> Edit</button>

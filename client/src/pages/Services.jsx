@@ -23,14 +23,15 @@ export default function Services() {
 
   const servicesQuery = useQuery({ queryKey: ["services"], queryFn: () => api("/services") });
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: () => api("/tasks") });
-  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
-  const teamQuery = useQuery({ queryKey: ["team"], queryFn: () => api("/team"), retry: false });
+  const clientsQuery = useQuery({ queryKey: ["client-options"], queryFn: () => api("/client-options") });
+  const teamQuery = useQuery({ queryKey: ["team-options", "with-self"], queryFn: () => api("/team-options?includeSelf=1"), retry: false });
 
   const services = servicesQuery.data?.data || [];
   const tasks = tasksQuery.data?.data || [];
   const clientOptions = (clientsQuery.data?.data || []).map((client) => ({ value: client.id, label: client.businessName }));
+  // /team is owner-only, so every other colleague got a 403 here and could never add a
+  // task. /team-options lists active colleagues only, with the caller included.
   const teamOptions = (teamQuery.data?.data || [])
-    .filter((member) => member.isActive && member.role !== "CLIENT")
     .map((member) => ({ value: member.id, label: member.name }));
   const serviceOptions = services.map((service) => ({
     value: service.id,

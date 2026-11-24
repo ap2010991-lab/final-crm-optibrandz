@@ -19,9 +19,13 @@ const router = express.Router();
  * offering somebody who can no longer sign in is offering nothing; and yourself, because
  * a note you own is already yours to read.
  */
+// `?includeSelf=1` is for the task assignee picker. Task assignees used to come from
+// /api/team, which is owner-only, so no colleague could ever add a task: the button sat
+// disabled with no explanation. Assigning a task to yourself is the commonest case.
 router.get("/", asyncRoute(async (req, res) => {
+  const includeSelf = req.query.includeSelf === "1";
   const data = await prisma.user.findMany({
-    where: { isActive: true, role: { not: "CLIENT" }, id: { not: req.user.id } },
+    where: { isActive: true, role: { not: "CLIENT" }, ...(includeSelf ? {} : { id: { not: req.user.id } }) },
     select: { id: true, name: true, avatar: true, role: true },
     orderBy: { createdAt: "asc" }
   });

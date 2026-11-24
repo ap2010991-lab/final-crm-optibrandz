@@ -31,6 +31,7 @@ export default function ClientDetail() {
     notify("Client updated.");
     query.refetch();
     queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["client-options"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   }
 

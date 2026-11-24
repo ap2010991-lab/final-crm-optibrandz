@@ -21,7 +21,7 @@ export default function Invoices({ readOnly = false }) {
   const [paying, setPaying] = useState(null);
 
   const query = useQuery({ queryKey: ["invoices"], queryFn: () => api("/invoices") });
-  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients"), enabled: !readOnly });
+  const clientsQuery = useQuery({ queryKey: ["client-options"], queryFn: () => api("/client-options"), enabled: !readOnly });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: () => api("/settings") });
 
   const invoices = query.data?.data || [];

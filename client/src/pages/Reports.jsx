@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Trash2 } from "lucide-react";
-import { api, PUBLIC_BASE } from "../lib/api";
+import { api, PUBLIC_BASE, useAuth } from "../lib/api";
 import { longDate, monthLabel } from "../lib/format";
 import { QueryState } from "../components/QueryState";
 import { ConfirmModal } from "../components/RecordModal";
@@ -10,12 +10,22 @@ import { useToast } from "../lib/useToast";
 export default function Reports() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
+  const { user } = useAuth();
   const now = new Date();
+  // Reports go out after a month closes, so the button used to only ever generate the
+  // current month — on 1 December there was no way to make November's. The last twelve
+  // months are offered, the current one first.
+  const periods = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+    return { value: `${date.getFullYear()}-${date.getMonth() + 1}`, month: date.getMonth() + 1, year: date.getFullYear() };
+  });
+  const [periodValue, setPeriodValue] = useState(periods[0].value);
+  const period = periods.find((entry) => entry.value === periodValue) || periods[0];
   const [chosenClientId, setChosenClientId] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(null);
 
-  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => api("/clients") });
+  const clientsQuery = useQuery({ queryKey: ["client-options"], queryFn: () => api("/client-options") });
   const clients = useMemo(() => clientsQuery.data?.data || [], [clientsQuery.data]);
   // The dropdown showed the first client while the list below quietly fetched every
   // client's reports, so the two never agreed. One derived value now drives both.
@@ -34,7 +44,7 @@ export default function Reports() {
     try {
       await api("/reports/generate", {
         method: "POST",
-        body: JSON.stringify({ clientId, month: now.getMonth() + 1, year: now.getFullYear() })
+        body: JSON.stringify({ clientId, month: period.month, year: period.year })
       });
       notify("Report generated.");
       queryClient.invalidateQueries({ queryKey: ["reports"] });
@@ -54,8 +64,11 @@ export default function Reports() {
       <select className="input max-w-full sm:max-w-xs" value={clientId} onChange={(event) => setChosenClientId(event.target.value)}>
         {clients.map((client) => <option key={client.id} value={client.id}>{client.businessName}</option>)}
       </select>
+      <select className="input max-w-full sm:max-w-[12rem]" value={period.value} onChange={(event) => setPeriodValue(event.target.value)} aria-label="Report month">
+        {periods.map((entry) => <option key={entry.value} value={entry.value}>{monthLabel(entry.month, entry.year)}</option>)}
+      </select>
       <button className="primary" onClick={generateReport} disabled={!clientId || busy}>
-        <FileText size={16} /> {busy ? "Generating..." : `Generate ${monthLabel(now.getMonth() + 1, now.getFullYear())}`}
+        <FileText size={16} /> {busy ? "Generating..." : `Generate ${monthLabel(period.month, period.year)}`}
       </button>
     </div>
 
@@ -74,7 +87,7 @@ export default function Reports() {
               <a className="table-action" href={`${PUBLIC_BASE}/api/public/reports/${report.id}/pdf`} target="_blank" rel="noopener noreferrer">
                 <FileText size={14} /> PDF
               </a>
-              <button className="danger-action" onClick={() => setDeleting(report)}><Trash2 size={14} /> Delete</button>
+              {user?.role === "OWNER" && <button className="danger-action" onClick={() => setDeleting(report)}><Trash2 size={14} /> Delete</button>}
             </div>
           </div>
           <p className="mt-3 text-sm leading-6 text-zinc-700">{report.summary}</p>

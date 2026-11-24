@@ -94,7 +94,11 @@ router.get("/", asyncRoute(async (req, res) => {
     include: { client: { select: { id: true, businessName: true, contactPerson: true, phone: true, email: true } } },
     orderBy: { createdAt: "desc" }
   });
-  res.json({ data });
+  // The stored status only turns OVERDUE when the nightly job runs, so for up to a day the
+  // list said "Pending" about an invoice the dashboard was already chasing. Derived on read
+  // with the same rule the dashboard uses, so the two always agree.
+  const today = startOfToday();
+  res.json({ data: data.map((invoice) => ({ ...invoice, status: invoiceStatus(invoice, today) })) });
 }));
 
 router.get("/run", asyncRoute(async (_req, res) => {

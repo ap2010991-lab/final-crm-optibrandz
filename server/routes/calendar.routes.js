@@ -27,10 +27,21 @@ const calendarSchema = z.object({
   postType: PostType.default("STATIC"),
   caption: z.string().optional(),
   designBrief: z.string().optional(),
-  scheduledDate: z.string().optional(),
+  scheduledDate: z.string().optional().nullable(),
   status: ContentStatus.default("DRAFT"),
   mediaUrl: z.string().optional()
 });
+
+function parseScheduledDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error("Enter a valid scheduled date.");
+    error.status = 422;
+    throw error;
+  }
+  return date;
+}
 
 router.get("/", asyncRoute(async (req, res) => {
   // Filtering on scheduledDate rather than the month/year columns when a range is asked
@@ -58,8 +69,17 @@ router.get("/", asyncRoute(async (req, res) => {
 
 router.post("/", asyncRoute(async (req, res) => {
   const body = calendarSchema.parse(req.body);
+  // A post logged after the fact is added straight in as Published. Only the PUT path used
+  // to stamp the dates, so these never counted in the monthly report's publishedAt month
+  // and fell back to their scheduled date. A published post was necessarily approved.
+  const now = new Date();
   const item = await prisma.contentCalendar.create({
-    data: { ...body, scheduledDate: body.scheduledDate ? new Date(body.scheduledDate) : null }
+    data: {
+      ...body,
+      scheduledDate: parseScheduledDate(body.scheduledDate),
+      approvedAt: ["APPROVED", "PUBLISHED"].includes(body.status) ? now : null,
+      publishedAt: body.status === "PUBLISHED" ? now : null
+    }
   });
   res.status(201).json({ data: item });
 }));
@@ -115,7 +135,7 @@ router.put("/:id", asyncRoute(async (req, res) => {
   // called from anywhere. Reports therefore had to use the *scheduled* date as a stand-in
   // for when a post actually went out, which is wrong whenever it slipped a day.
   const stamps = {};
-  if (body.status === "APPROVED" && !current.approvedAt) stamps.approvedAt = new Date();
+  if (["APPROVED", "PUBLISHED"].includes(body.status) && !current.approvedAt) stamps.approvedAt = new Date();
   if (body.status === "PUBLISHED" && !current.publishedAt) stamps.publishedAt = new Date();
   // Moving a post back out of published means it did not go out after all.
   if (body.status && body.status !== "PUBLISHED" && current.publishedAt) stamps.publishedAt = null;
@@ -125,7 +145,8 @@ router.put("/:id", asyncRoute(async (req, res) => {
     data: {
       ...body,
       ...stamps,
-      ...(body.scheduledDate ? { scheduledDate: new Date(body.scheduledDate) } : {})
+      // Blank used to reach Prisma as "" and come back as a 500. It now clears the date.
+      ...("scheduledDate" in body ? { scheduledDate: parseScheduledDate(body.scheduledDate) } : {})
     }
   });
   res.json({ data: item });

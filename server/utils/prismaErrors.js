@@ -18,6 +18,12 @@ const MESSAGES = {
 };
 
 function mapPrismaError(error) {
+  // A value Prisma refuses before it reaches Postgres — `?status=NOPE` on a list, or a
+  // date that is not a date — carries no P-code, so it used to fall through to a 500.
+  // Every such value comes from the request, so it is the caller's mistake.
+  if (error?.name === "PrismaClientValidationError") {
+    return { status: 422, message: "One of those values is not valid for this field." };
+  }
   if (!error || typeof error.code !== "string" || !error.code.startsWith("P2")) return null;
   const [status, message] = MESSAGES[error.code] || [422, "That value is not valid for this field."];
 

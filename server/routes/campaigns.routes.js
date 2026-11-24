@@ -36,6 +36,9 @@ router.get("/", asyncRoute(async (req, res) => {
       ...(req.query.month ? { month: Number(req.query.month) } : {}),
       ...(req.query.year ? { year: Number(req.query.year) } : {})
     },
+    // The table listed every client's results for the month with nothing saying whose
+    // they were, so two Meta rows could not be told apart.
+    include: { client: { select: { id: true, businessName: true } } },
     orderBy: { createdAt: "desc" }
   });
   res.json({ data });
